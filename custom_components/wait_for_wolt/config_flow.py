@@ -45,11 +45,8 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return WoltOptionsFlowHandler(config_entry)
 
 
-class WoltOptionsFlowHandler(config_entries.OptionsFlow):
+class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
     """Handle option flows for the integration."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
