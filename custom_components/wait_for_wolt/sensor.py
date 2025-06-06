@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 import aiohttp
 import async_timeout
+import asyncio
 import voluptuous as vol
 
 from homeassistant.components.sensor import SensorEntity
