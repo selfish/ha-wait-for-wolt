@@ -7,9 +7,30 @@ This custom component tracks your Wolt orders in Home Assistant. It polls the Wo
 2. Install **Wolt Order Tracker** and restart Home Assistant.
 
 ## Getting your tokens
-1. Log in to [wolt.com](https://wolt.com) in a browser.
-2. Inspect the network requests or local storage and copy the values of `w-wolt-session-id`, `access_token` and `refresh_token`.
-3. Use these values in the configuration below. The integration will refresh the access token when needed using the refresh token.
+Tokens are required to authenticate with the Wolt API. The easiest way to
+capture them is from your web browser after logging in.
+
+1. Log in to [wolt.com](https://wolt.com) and open the developer tools
+   (usually <kbd>F12</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>).
+2. Under the **Application** (or **Storage**) tab locate the **Local
+   Storage** entry for `https://wolt.com`.
+3. In the **Console** paste the snippet below to print the needed values
+   without digging through the storage menus:
+
+   ```js
+   (() => {
+     const getCookie = (name) => document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1];
+     console.log('SESSION_ID:', getCookie('__woltUid'));
+     console.log('REFRESH_TOKEN:', JSON.parse(decodeURIComponent(document.cookie.match(/__wrtoken=([^;]+)/)?.[1] || '')));
+     console.log('ACCESS_TOKEN:', JSON.parse(decodeURIComponent(getCookie('__wtoken') || '{}')).accessToken);
+   })();
+   ```
+
+   Copy the printed values for use below. If the keys are not present you can
+   also inspect the network request headers to find them.
+4. Use these tokens in the configuration below. They will be refreshed
+   automatically when required.
+
 
 ## Configuration
 You can add the integration from Home Assistant's **Add Integration** menu or via YAML.
