@@ -12,7 +12,8 @@ This custom component tracks your Wolt orders in Home Assistant. It polls the Wo
 3. Use these values in the configuration below. The integration will refresh the access token when needed using the refresh token.
 
 ## Configuration
-Add a sensor entry to `configuration.yaml`:
+You can add the integration from Home Assistant's **Add Integration** menu or via YAML.
+To configure with YAML, add a sensor entry to `configuration.yaml`:
 
 ```yaml
 sensor:

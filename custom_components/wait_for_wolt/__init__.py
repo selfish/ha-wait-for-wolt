@@ -13,6 +13,7 @@ import voluptuous as vol
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
@@ -42,6 +43,48 @@ PLATFORM_SCHEMA = cv.PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
     }
 )
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up via YAML (sensor platform handles entities)."""
+    return True
+
+
+async def _setup_sensors(
+    hass: HomeAssistant,
+    async_add_entities: AddEntitiesCallback,
+    name: str,
+    session_id: str,
+    token: str,
+    refresh: str,
+) -> None:
+    """Create sensors and schedule updates."""
+    session = async_get_clientsession(hass)
+    api = WoltApi(session, session_id, token, refresh)
+
+    sensors: List[WoltOrderSensor] = []
+
+    async def _update_orders(now=None) -> None:
+        orders = await api.fetch_active_orders()
+        known = {sensor.order_id for sensor in sensors}
+        new_entities = []
+        for order in orders:
+            order_id = order.get("order_id")
+            if not order_id or order_id in known:
+                continue
+            sensor = WoltOrderSensor(api, order_id, f"{name} {order_id}")
+            sensors.append(sensor)
+            new_entities.append(sensor)
+        if new_entities:
+            async_add_entities(new_entities)
+
+    await _update_orders()
+    if sensors:
+        async_add_entities(sensors, update_before_add=True)
+    else:
+        _LOGGER.info("No active orders found")
+
+    async_track_time_interval(hass, _update_orders, timedelta(seconds=UPDATE_INTERVAL))
 
 
 class WoltApi:
@@ -103,38 +146,35 @@ async def async_setup_platform(
     async_add_entities: AddEntitiesCallback,
     discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
-    """Set up the Wolt order sensors."""
+    """Set up Wolt sensors from YAML."""
     name = config[CONF_NAME]
     session_id = config[CONF_SESSION_ID]
     token = config[CONF_BEARER_TOKEN]
     refresh = config[CONF_REFRESH_TOKEN]
 
-    session = async_get_clientsession(hass)
-    api = WoltApi(session, session_id, token, refresh)
+    await _setup_sensors(hass, async_add_entities, name, session_id, token, refresh)
 
-    sensors: List[WoltOrderSensor] = []
 
-    async def _update_orders(now=None) -> None:
-        orders = await api.fetch_active_orders()
-        known = {sensor.order_id for sensor in sensors}
-        new_entities = []
-        for order in orders:
-            order_id = order.get("order_id")
-            if not order_id or order_id in known:
-                continue
-            sensor = WoltOrderSensor(api, order_id, f"{name} {order_id}")
-            sensors.append(sensor)
-            new_entities.append(sensor)
-        if new_entities:
-            async_add_entities(new_entities)
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Wolt sensors from a config entry."""
+    data = entry.data
+    await _setup_sensors(
+        hass,
+        async_add_entities,
+        data.get(CONF_NAME, DEFAULT_NAME),
+        data[CONF_SESSION_ID],
+        data[CONF_BEARER_TOKEN],
+        data[CONF_REFRESH_TOKEN],
+    )
 
-    await _update_orders()
-    if sensors:
-        async_add_entities(sensors, update_before_add=True)
-    else:
-        _LOGGER.info("No active orders found")
 
-    async_track_time_interval(hass, _update_orders, timedelta(seconds=UPDATE_INTERVAL))
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    return True
 
 
 class WoltOrderSensor(SensorEntity):

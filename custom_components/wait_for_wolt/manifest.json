@@ -3,8 +3,9 @@
   "name": "Wolt Order Tracker",
   "documentation": "https://github.com/nitperez/ha-wait-for-wolt",
   "issue_tracker": "https://github.com/nitperez/ha-wait-for-wolt/issues",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "requirements": [],
   "codeowners": ["@nitperez"],
-  "iot_class": "cloud_polling"
+  "iot_class": "cloud_polling",
+  "config_flow": true
 }
