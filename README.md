@@ -43,6 +43,9 @@ sensor:
     session_id: YOUR_SESSION_ID
     bearer_token: YOUR_ACCESS_TOKEN
     refresh_token: YOUR_REFRESH_TOKEN
+    venue_ids:
+      - mententen
+      - another-venue
 ```
 
 ## How it works
@@ -50,6 +53,7 @@ sensor:
 - Every minute it polls Wolt for your active orders.
 - A sensor entity is created for each order that is in progress. The sensor state reflects the current order status and attributes include the delivery estimate, venue and items ordered.
 - New orders placed while Home Assistant is running are discovered automatically within the polling interval.
+- If you configure `venue_ids`, sensors for each venue report whether it is open and expose delivery price and estimates when available.
 
 ## Limitations
 - The integration relies on tokens taken from the Wolt web site. If they become invalid you will need to capture new ones.

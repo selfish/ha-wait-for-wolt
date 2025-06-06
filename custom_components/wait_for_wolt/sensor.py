@@ -24,10 +24,12 @@ from .const import (
     CONF_BEARER_TOKEN,
     CONF_REFRESH_TOKEN,
     CONF_SESSION_ID,
+    CONF_VENUE_IDS,
     DEFAULT_NAME,
     ACTIVE_ORDERS_URL,
     HEADERS,
     ORDER_DETAILS_URL,
+    VENUE_CONTENT_URL,
     REFRESH_URL,
     UPDATE_INTERVAL,
 )
@@ -39,6 +41,7 @@ PLATFORM_SCHEMA = cv.PLATFORM_SCHEMA.extend(
         vol.Required(CONF_SESSION_ID): cv.string,
         vol.Required(CONF_BEARER_TOKEN): cv.string,
         vol.Required(CONF_REFRESH_TOKEN): cv.string,
+        vol.Optional(CONF_VENUE_IDS, default=[]): vol.All(cv.ensure_list, [cv.string]),
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
     }
 )
@@ -51,12 +54,19 @@ async def _setup_sensors(
     session_id: str,
     token: str,
     refresh: str,
+    venues: List[str] | None = None,
 ) -> None:
     """Create sensors and schedule updates."""
     session = async_get_clientsession(hass)
     api = WoltApi(session, session_id, token, refresh)
 
     sensors: List[WoltOrderSensor] = []
+    venue_sensors: List[WoltVenueSensor] = []
+
+    if venues:
+        for slug in venues:
+            venue_sensors.append(WoltVenueSensor(api, slug, f"{name} {slug}"))
+        async_add_entities(venue_sensors, update_before_add=True)
 
     async def _update_orders(now=None) -> None:
         orders = await api.fetch_active_orders()
@@ -133,6 +143,14 @@ class WoltApi:
         details = data.get("order_details") or []
         return details[0] if details else None
 
+    async def fetch_venue_details(self, slug: str) -> Dict[str, Any] | None:
+        url = VENUE_CONTENT_URL.format(slug)
+        data = await self._request("GET", url)
+        if not isinstance(data, dict):
+            return None
+        venue = data.get("venue") or data.get("venue_info") or {}
+        return venue
+
 
 async def async_setup_platform(
     hass: HomeAssistant,
@@ -146,7 +164,10 @@ async def async_setup_platform(
     token = config[CONF_BEARER_TOKEN]
     refresh = config[CONF_REFRESH_TOKEN]
 
-    await _setup_sensors(hass, async_add_entities, name, session_id, token, refresh)
+    venues = config.get(CONF_VENUE_IDS, [])
+    await _setup_sensors(
+        hass, async_add_entities, name, session_id, token, refresh, venues
+    )
 
 
 async def async_setup_entry(
@@ -156,6 +177,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Wolt sensors from a config entry."""
     data = entry.data
+    venues = entry.options.get(CONF_VENUE_IDS) or data.get(CONF_VENUE_IDS, [])
     await _setup_sensors(
         hass,
         async_add_entities,
@@ -163,6 +185,7 @@ async def async_setup_entry(
         data[CONF_SESSION_ID],
         data[CONF_BEARER_TOKEN],
         data[CONF_REFRESH_TOKEN],
+        venues,
     )
 
 
@@ -197,3 +220,37 @@ class WoltOrderSensor(SensorEntity):
             "items": [item.get("name") for item in details.get("items", [])],
         }
         self._attr_icon = "mdi:package-variant"
+
+
+class WoltVenueSensor(SensorEntity):
+    """Sensor representing a Wolt venue's availability."""
+
+    _attr_attribution = "Data provided by Wolt"
+
+    def __init__(self, api: WoltApi, slug: str, name: str) -> None:
+        self.api = api
+        self.slug = slug
+        self._attr_name = name
+        self._attr_unique_id = f"wolt_venue_{slug}"
+        self._state = None
+        self._attr_extra_state_attributes = {}
+        self._attr_icon = "mdi:store"
+
+    @property
+    def native_value(self):
+        return self._state
+
+    async def async_update(self) -> None:
+        details = await self.api.fetch_venue_details(self.slug)
+        if not details:
+            _LOGGER.warning("Venue %s details not found", self.slug)
+            return
+        is_open = details.get("online") or details.get("is_open")
+        self._state = "open" if is_open else "closed"
+        delivery = details.get("delivery_time") or details.get("delivery_time_min")
+        delivery_max = details.get("delivery_time_max")
+        self._attr_extra_state_attributes = {
+            "delivery_price": details.get("delivery_price"),
+            "delivery_time_min": delivery,
+            "delivery_time_max": delivery_max,
+        }

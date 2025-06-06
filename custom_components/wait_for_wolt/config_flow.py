@@ -9,6 +9,7 @@ from .const import (
     CONF_SESSION_ID,
     CONF_BEARER_TOKEN,
     CONF_REFRESH_TOKEN,
+    CONF_VENUE_IDS,
     DEFAULT_NAME,
 )
 
@@ -23,6 +24,7 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_SESSION_ID): str,
             vol.Required(CONF_BEARER_TOKEN): str,
             vol.Required(CONF_REFRESH_TOKEN): str,
+            vol.Optional(CONF_VENUE_IDS, default=""): str,
             vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
         }
     )
@@ -30,7 +32,31 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         if user_input is not None:
-            return self.async_create_entry(title=user_input.get(CONF_NAME, DEFAULT_NAME), data=user_input)
+            venue_ids = [v.strip() for v in user_input.get(CONF_VENUE_IDS, "").split("\n") if v.strip()]
+            user_input[CONF_VENUE_IDS] = venue_ids
+            return self.async_create_entry(
+                title=user_input.get(CONF_NAME, DEFAULT_NAME), data=user_input
+            )
 
         return self.async_show_form(step_id="user", data_schema=self.DATA_SCHEMA)
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        return WoltOptionsFlowHandler(config_entry)
+
+
+class WoltOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle option flows for the integration."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            venue_ids = [v.strip() for v in user_input.get(CONF_VENUE_IDS, "").split("\n") if v.strip()]
+            return self.async_create_entry(title="", data={CONF_VENUE_IDS: venue_ids})
+
+        current = "\n".join(self.config_entry.options.get(CONF_VENUE_IDS, self.config_entry.data.get(CONF_VENUE_IDS, [])))
+        schema = vol.Schema({vol.Optional(CONF_VENUE_IDS, default=current): str})
+        return self.async_show_form(step_id="init", data_schema=schema)
 
