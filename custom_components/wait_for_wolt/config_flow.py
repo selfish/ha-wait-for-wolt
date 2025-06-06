@@ -32,7 +32,11 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         if user_input is not None:
-            venue_ids = [v.strip() for v in user_input.get(CONF_VENUE_IDS, "").split("\n") if v.strip()]
+            venue_ids = [
+                v.strip()
+                for v in user_input.get(CONF_VENUE_IDS, "").split("\n")
+                if v.strip()
+            ]
             user_input[CONF_VENUE_IDS] = venue_ids
             return self.async_create_entry(
                 title=user_input.get(CONF_NAME, DEFAULT_NAME), data=user_input
@@ -70,6 +74,8 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlow):
                 options={CONF_VENUE_IDS: venue_ids},
             )
 
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+
             return self.async_create_entry(title="", data={})
 
         current = "\n".join(
@@ -95,4 +101,3 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlow):
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
-
