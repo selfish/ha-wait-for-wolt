@@ -165,8 +165,7 @@ class WoltApi:
         if not isinstance(data, dict):
             _LOGGER.warning("Bad response for venue: %s: %s", slug, data)
             return None
-        venue = data.get("venue") or data.get("venue_info") or {}
-        return venue
+        return data
 
 
 async def async_setup_platform(
@@ -262,12 +261,62 @@ class WoltVenueSensor(SensorEntity):
         if not details:
             _LOGGER.warning("Venue %s details not found", self.slug)
             return
-        is_open = details.get("online") or details.get("is_open")
+
+        venue = details.get("venue") or details.get("venue_info") or {}
+        open_info = (
+            venue.get("delivery_open_status")
+            or venue.get("open_status")
+            or {}
+        )
+
+        is_open = open_info.get("is_open") or venue.get("online") or venue.get("is_open")
         self._state = "open" if is_open else "closed"
-        delivery = details.get("delivery_time") or details.get("delivery_time_min")
-        delivery_max = details.get("delivery_time_max")
+
+        # Extract estimates for available delivery methods
+        estimates: Dict[str, Any] = {}
+        for cfg in venue.get("delivery_configs", []):
+            method = cfg.get("method")
+            estimate = cfg.get("estimate") or {}
+            if method and estimate:
+                estimates[f"{method}_estimate_min"] = estimate.get("min")
+                estimates[f"{method}_estimate_max"] = estimate.get("max")
+
+        # Parse useful metadata from the header section
+        header = venue.get("header", {})
+        meta = header.get("delivery_method_statuses", [{}])[0].get("metadata", [])
+        rating = None
+        delivery_fee = None
+        service_fee = None
+        min_order_text = None
+        for item in meta:
+            icon = item.get("icon")
+            value = item.get("value")
+            if icon and icon.startswith("RATING"):
+                rating = value
+            elif icon == "CYCLIST":
+                delivery_fee = value
+            elif value and "Min. order" in value:
+                min_order_text = value
+            elif value and "Service fee" in value:
+                service_fee = value
+
+        banner_text = None
+        if venue.get("banners"):
+            banner = venue["banners"][0]
+            discount = banner.get("discount") or banner
+            banner_text = discount.get("formatted_text")
+
         self._attr_extra_state_attributes = {
-            "delivery_price": details.get("delivery_price"),
-            "delivery_time_min": delivery,
-            "delivery_time_max": delivery_max,
+            "online": venue.get("online"),
+            "open_status": open_info.get("value"),
+            "next_open": open_info.get("next_open"),
+            "next_close": open_info.get("next_close"),
+            "order_minimum": details.get("order_minimum"),
+            "is_venue_favourite": details.get("is_venue_favourite"),
+            "rating": rating,
+            "delivery_fee": delivery_fee,
+            "service_fee": service_fee,
+            "min_order_text": min_order_text,
+            "discount": banner_text,
+            **estimates,
         }
