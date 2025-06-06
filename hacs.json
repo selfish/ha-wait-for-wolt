@@ -1,0 +1,7 @@
+{
+  "name": "Wolt Order Tracker",
+  "content_in_root": false,
+  "domain": "wait_for_wolt",
+  "homeassistant": "2024.0.0",
+  "render_readme": true
+}
