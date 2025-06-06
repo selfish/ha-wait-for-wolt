@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Wolt account",
+        "description": "Enter tokens from wolt.com. Venue IDs are the slugs from the venue URL, one per line.",
+        "data": {
+          "session_id": "Session ID",
+          "bearer_token": "Access Token",
+          "refresh_token": "Refresh Token",
+          "venue_ids": "Venue IDs"
+        }
+      },
+      "init": {
+        "title": "Update Wolt settings",
+        "description": "Update tokens or venue IDs. Venue IDs are slugs from the venue URL, one per line.",
+        "data": {
+          "session_id": "Session ID",
+          "bearer_token": "Access Token",
+          "refresh_token": "Refresh Token",
+          "venue_ids": "Venue IDs"
+        }
+      }
+    }
+  }
+}

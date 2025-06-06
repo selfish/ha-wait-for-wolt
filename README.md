@@ -48,6 +48,10 @@ sensor:
       - another-venue
 ```
 
+`venue_ids` should be the slug from the venue URL on wolt.com. For example,
+`https://wolt.com/en/isr/tel-aviv/restaurant/mententen` uses `mententen` as the
+ID. Enter one ID per line or list entry.
+
 ## How it works
 - The integration refreshes the bearer token automatically.
 - Every minute it polls Wolt for your active orders.
