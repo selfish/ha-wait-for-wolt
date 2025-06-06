@@ -12,9 +12,13 @@ DEFAULT_NAME = "Wolt Order"
 UPDATE_INTERVAL = 60  # seconds
 
 REFRESH_URL = "https://converse-api.wolt.com/auth-api/v2/token"
-ACTIVE_ORDERS_URL = "https://restaurant-api.wolt.com/v2/orders/active"
+# Updated endpoints based on the current Wolt web client
+ACTIVE_ORDERS_URL = (
+    "https://consumer-api.wolt.com/order-xp/web/v1/pages/orders"
+)
 ORDER_DETAILS_URL = (
-    "https://restaurant-api.wolt.com/v2/order_details/by_ids?purchases={}")
+    "https://consumer-api.wolt.com/order-xp/web/v1/pages/orders/{}"
+)
 VENUE_CONTENT_URL = (
     "https://consumer-api.wolt.com/consumer-api/venue-content-api/v3/web/venue-content/slug/{}"
 )
