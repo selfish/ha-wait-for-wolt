@@ -19,12 +19,10 @@ capture them is from your web browser after logging in.
 
    ```js
    (() => {
-     const session = localStorage.getItem('__woltUid');
-     const access = JSON.parse(localStorage.getItem('__wtoken') || '{}').accessToken;
-     const refresh = decodeURIComponent(document.cookie.match(/__wrtoken=([^;]+)/)?.[1] || '');
-     console.log('SESSION_ID:', session);
-     console.log('ACCESS_TOKEN:', access);
-     console.log('REFRESH_TOKEN:', refresh);
+     const getCookie = (name) => document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1];
+     console.log('SESSION_ID:', getCookie('__woltUid'));
+     console.log('REFRESH_TOKEN:', JSON.parse(decodeURIComponent(document.cookie.match(/__wrtoken=([^;]+)/)?.[1] || '')));
+     console.log('ACCESS_TOKEN:', JSON.parse(decodeURIComponent(getCookie('__wtoken') || '{}')).accessToken);
    })();
    ```
 
