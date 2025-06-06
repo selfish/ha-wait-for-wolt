@@ -163,6 +163,7 @@ class WoltApi:
         # Public endpoint - do not send authentication headers
         data = await self._request("GET", url, auth=False)
         if not isinstance(data, dict):
+            _LOGGER.warning("Bad response for venue: %s: %s", slug, data)
             return None
         venue = data.get("venue") or data.get("venue_info") or {}
         return venue
