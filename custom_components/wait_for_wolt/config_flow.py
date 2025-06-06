@@ -53,10 +53,46 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
-            venue_ids = [v.strip() for v in user_input.get(CONF_VENUE_IDS, "").split("\n") if v.strip()]
-            return self.async_create_entry(title="", data={CONF_VENUE_IDS: venue_ids})
+            venue_ids = [
+                v.strip()
+                for v in user_input.get(CONF_VENUE_IDS, "").split("\n")
+                if v.strip()
+            ]
 
-        current = "\n".join(self.config_entry.options.get(CONF_VENUE_IDS, self.config_entry.data.get(CONF_VENUE_IDS, [])))
-        schema = vol.Schema({vol.Optional(CONF_VENUE_IDS, default=current): str})
+            data = {**self.config_entry.data}
+            data[CONF_SESSION_ID] = user_input[CONF_SESSION_ID]
+            data[CONF_BEARER_TOKEN] = user_input[CONF_BEARER_TOKEN]
+            data[CONF_REFRESH_TOKEN] = user_input[CONF_REFRESH_TOKEN]
+
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data=data,
+                options={CONF_VENUE_IDS: venue_ids},
+            )
+
+            return self.async_create_entry(title="", data={})
+
+        current = "\n".join(
+            self.config_entry.options.get(
+                CONF_VENUE_IDS, self.config_entry.data.get(CONF_VENUE_IDS, [])
+            )
+        )
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_SESSION_ID,
+                    default=self.config_entry.data.get(CONF_SESSION_ID, ""),
+                ): str,
+                vol.Required(
+                    CONF_BEARER_TOKEN,
+                    default=self.config_entry.data.get(CONF_BEARER_TOKEN, ""),
+                ): str,
+                vol.Required(
+                    CONF_REFRESH_TOKEN,
+                    default=self.config_entry.data.get(CONF_REFRESH_TOKEN, ""),
+                ): str,
+                vol.Optional(CONF_VENUE_IDS, default=current): str,
+            }
+        )
         return self.async_show_form(step_id="init", data_schema=schema)
 
