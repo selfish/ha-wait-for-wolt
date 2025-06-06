@@ -1,11 +1,11 @@
 {
   "domain": "wait_for_wolt",
   "name": "Wolt Order Tracker",
-  "documentation": "https://github.com/nitperez/ha-wait-for-wolt",
-  "issue_tracker": "https://github.com/nitperez/ha-wait-for-wolt/issues",
+  "documentation": "https://github.com/selfish/ha-wait-for-wolt",
+  "issue_tracker": "https://github.com/selfish/ha-wait-for-wolt/issues",
   "version": "0.0.4",
   "requirements": [],
-  "codeowners": ["@nitperez"],
+  "codeowners": ["@selfish"],
   "iot_class": "cloud_polling",
   "config_flow": true
 }
