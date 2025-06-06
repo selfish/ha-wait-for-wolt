@@ -103,7 +103,12 @@ class WoltApi:
 
     async def _refresh_token(self) -> None:
         """Refresh the bearer token using the refresh token."""
-        payload = {"refresh_token": self._refresh}
+        payload = {
+            "grantType": "refresh_token",
+            "audience": "converse_widget",
+            "refreshToken": self._refresh,
+            "appId": "wolt-consumer",
+        }
         try:
             async with async_timeout.timeout(10):
                 async with self._session.post(REFRESH_URL, json=payload, headers=HEADERS) as resp:
@@ -112,10 +117,10 @@ class WoltApi:
             _LOGGER.error("Token refresh failed: %s", err)
             return
 
-        if "access_token" in data:
-            self._token = data["access_token"]
-        if "refresh_token" in data:
-            self._refresh = data["refresh_token"]
+        if "accessToken" in data:
+            self._token = data["accessToken"]
+        if "refreshToken" in data:
+            self._refresh = data["refreshToken"]
 
     async def _request(self, method: str, url: str, auth: bool = True) -> Any:
         """Make a request and return the parsed JSON response."""
