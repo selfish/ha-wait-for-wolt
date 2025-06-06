@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import voluptuous as vol
+from homeassistant.helpers.selector import TextSelector
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
@@ -24,7 +25,7 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_SESSION_ID): str,
             vol.Required(CONF_BEARER_TOKEN): str,
             vol.Required(CONF_REFRESH_TOKEN): str,
-            vol.Optional(CONF_VENUE_IDS, default=""): str,
+            vol.Optional(CONF_VENUE_IDS, default=""): TextSelector({"multiline": True}),
             vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
         }
     )
@@ -94,7 +95,7 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     CONF_REFRESH_TOKEN,
                     default=self.config_entry.data.get(CONF_REFRESH_TOKEN, ""),
                 ): str,
-                vol.Optional(CONF_VENUE_IDS, default=current): str,
+                vol.Optional(CONF_VENUE_IDS, default=current): TextSelector({"multiline": True}),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
