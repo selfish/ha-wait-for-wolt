@@ -20,7 +20,7 @@ ORDER_DETAILS_URL = (
     "https://consumer-api.wolt.com/order-xp/web/v1/pages/orders/{}"
 )
 VENUE_CONTENT_URL = (
-    "https://consumer-api.wolt.com/consumer-api/venue-content-api/v3/web/venue-content/slug/{}"
+    "https://consumer-api.wolt.com/order-xp/web/v1/venue/slug/{}/dynamic/?selected_delivery_method=homedelivery"
 )
 
 HEADERS = {
