@@ -117,18 +117,27 @@ class WoltApi:
         if "refresh_token" in data:
             self._refresh = data["refresh_token"]
 
-    async def _request(self, method: str, url: str) -> Any:
-        await self._refresh_token()
-        headers = {
-            **HEADERS,
-            "w-wolt-session-id": self._session_id,
-            "authorization": f"Bearer {self._token}",
-        }
+    async def _request(self, method: str, url: str, auth: bool = True) -> Any:
+        """Make a request and return the parsed JSON response."""
+        headers = {**HEADERS}
+        if auth:
+            await self._refresh_token()
+            headers.update(
+                {
+                    "w-wolt-session-id": self._session_id,
+                    "authorization": f"Bearer {self._token}",
+                }
+            )
         try:
             async with async_timeout.timeout(10):
                 async with self._session.request(method, url, headers=headers) as resp:
+                    resp.raise_for_status()
                     return await resp.json()
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:  # type: ignore[name-defined]
+        except (
+            aiohttp.ClientError,
+            asyncio.TimeoutError,
+            aiohttp.ContentTypeError,
+        ) as err:  # type: ignore[name-defined]
             _LOGGER.error("Error requesting %s: %s", url, err)
             return None
 
@@ -146,7 +155,8 @@ class WoltApi:
 
     async def fetch_venue_details(self, slug: str) -> Dict[str, Any] | None:
         url = VENUE_CONTENT_URL.format(slug)
-        data = await self._request("GET", url)
+        # Public endpoint - do not send authentication headers
+        data = await self._request("GET", url, auth=False)
         if not isinstance(data, dict):
             return None
         venue = data.get("venue") or data.get("venue_info") or {}
