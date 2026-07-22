@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a reproducible problem without sharing private data
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. **Never include Wolt tokens, cookies, authorization headers, HAR files, addresses, order/purchase IDs, item histories, or courier coordinates.** Use synthetic placeholders and redact screenshots/logs.
+  - type: input
+    id: version
+    attributes:
+      label: Integration version or commit
+      placeholder: v0.1.0 or a commit SHA
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: 2026.7.3
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - HACS custom repository
+        - Manual custom_components copy
+        - Development checkout
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe expected and actual behavior with private values replaced by synthetic placeholders.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Add the integration...
+        2. Place a test order...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs
+      description: Include only relevant lines. Remove tokens, cookies, personal/order data, addresses, IDs, and coordinates.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Privacy and duplicate checks
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: I removed all credentials and private Wolt/Home Assistant data.
+          required: true
+        - label: This is not a security vulnerability requiring private disclosure.
+          required: true
