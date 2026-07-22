@@ -84,7 +84,10 @@ a reauthentication flow for replacement tokens.
 - One shared coordinator polls every 30 seconds while an order is active and every
   five minutes while idle. Each authenticated endpoint is fetched at most once per
   cycle, and optional rich tracking failures fall back to the order summary.
-- A sensor entity is created for each order that is in progress. The sensor state reflects the current order status and attributes include the delivery estimate, venue and items ordered.
+- Each in-progress purchase gets a device with a stable enum status sensor and a
+  timestamp ETA sensor. Existing status entities are migrated to config-entry-scoped
+  unique IDs. Order item lists, payment values, addresses, and raw API payloads are
+  intentionally not exposed as entity attributes.
 - New orders placed while Home Assistant is running are discovered automatically within the polling interval.
 - If you configure `venue_ids`, sensors poll the public venue endpoint every five
   minutes, report whether it is open, and expose delivery price and estimates when
