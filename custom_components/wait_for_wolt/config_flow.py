@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import voluptuous as vol
-from homeassistant.helpers.selector import TextSelector
-
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
+from homeassistant.helpers.selector import TextSelector
+
 from .const import (
-    DOMAIN,
-    CONF_SESSION_ID,
     CONF_BEARER_TOKEN,
     CONF_REFRESH_TOKEN,
+    CONF_SESSION_ID,
     CONF_VENUE_IDS,
     DEFAULT_NAME,
+    DOMAIN,
 )
 
 
@@ -22,7 +22,7 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     DATA_SCHEMA = vol.Schema(
         {
-            vol.Required(CONF_SESSION_ID): str,
+            vol.Optional(CONF_SESSION_ID, default=""): str,
             vol.Required(CONF_BEARER_TOKEN): str,
             vol.Required(CONF_REFRESH_TOKEN): str,
             vol.Optional(CONF_VENUE_IDS, default=""): TextSelector({"multiline": True}),
@@ -33,6 +33,7 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         if user_input is not None:
+            user_input[CONF_SESSION_ID] = user_input.get(CONF_SESSION_ID, "")
             venue_ids = [
                 v.strip()
                 for v in user_input.get(CONF_VENUE_IDS, "").split("\n")
@@ -61,20 +62,19 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 if v.strip()
             ]
 
-            data = {**self.config_entry.data}
-            data[CONF_SESSION_ID] = user_input[CONF_SESSION_ID]
-            data[CONF_BEARER_TOKEN] = user_input[CONF_BEARER_TOKEN]
-            data[CONF_REFRESH_TOKEN] = user_input[CONF_REFRESH_TOKEN]
-
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
-                data=data,
-                options={CONF_VENUE_IDS: venue_ids},
+                data={
+                    **self.config_entry.data,
+                    CONF_SESSION_ID: user_input.get(CONF_SESSION_ID, ""),
+                    CONF_BEARER_TOKEN: user_input[CONF_BEARER_TOKEN],
+                    CONF_REFRESH_TOKEN: user_input[CONF_REFRESH_TOKEN],
+                },
             )
-
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-
-            return self.async_create_entry(title="", data={})
+            return self.async_create_entry(
+                title="",
+                data={CONF_VENUE_IDS: venue_ids},
+            )
 
         current = "\n".join(
             self.config_entry.options.get(
@@ -83,7 +83,7 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
         )
         schema = vol.Schema(
             {
-                vol.Required(
+                vol.Optional(
                     CONF_SESSION_ID,
                     default=self.config_entry.data.get(CONF_SESSION_ID, ""),
                 ): str,
@@ -95,7 +95,9 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     CONF_REFRESH_TOKEN,
                     default=self.config_entry.data.get(CONF_REFRESH_TOKEN, ""),
                 ): str,
-                vol.Optional(CONF_VENUE_IDS, default=current): TextSelector({"multiline": True}),
+                vol.Optional(CONF_VENUE_IDS, default=current): TextSelector(
+                    {"multiline": True}
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

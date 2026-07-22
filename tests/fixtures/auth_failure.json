@@ -1,0 +1,4 @@
+{
+  "error": "invalid_grant",
+  "message": "Sanitized authentication failure"
+}

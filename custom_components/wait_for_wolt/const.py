@@ -11,17 +11,11 @@ DEFAULT_NAME = "Wolt Order"
 
 UPDATE_INTERVAL = 60  # seconds
 
-REFRESH_URL = "https://converse-api.wolt.com/auth-api/v2/token"
+REFRESH_URL = "https://authentication.wolt.com/v1/wauth2/access_token"
 # Updated endpoints based on the current Wolt web client
-ACTIVE_ORDERS_URL = (
-    "https://consumer-api.wolt.com/order-xp/web/v1/pages/orders"
-)
-ORDER_DETAILS_URL = (
-    "https://consumer-api.wolt.com/order-xp/web/v1/pages/orders/{}"
-)
-VENUE_CONTENT_URL = (
-    "https://consumer-api.wolt.com/order-xp/web/v1/venue/slug/{}/dynamic/?selected_delivery_method=homedelivery"
-)
+ACTIVE_ORDERS_URL = "https://consumer-api.wolt.com/order-xp/web/v1/pages/orders"
+ORDER_DETAILS_URL = "https://consumer-api.wolt.com/order-xp/web/v1/pages/orders/{}"
+VENUE_CONTENT_URL = "https://consumer-api.wolt.com/order-xp/web/v1/venue/slug/{}/dynamic/?selected_delivery_method=homedelivery"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0",
