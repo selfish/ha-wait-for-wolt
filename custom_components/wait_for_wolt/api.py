@@ -32,7 +32,7 @@ FINAL_ORDER_STATUS_TYPES = {
 }
 
 
-def _active_order(order: dict[str, Any]) -> bool:
+def is_active_order(order: dict[str, Any]) -> bool:
     """Return whether an order-list item represents a trackable active order."""
     telemetry = order.get("telemetry")
     status_type = (
@@ -235,16 +235,16 @@ class WoltApi:
                 await self._refresh_access_token()
         return await self._perform_request(method, url, authenticated=True)
 
-    async def fetch_active_orders(self) -> list[dict[str, Any]]:
-        """Fetch the account's active orders."""
+    async def fetch_orders(self) -> list[dict[str, Any]]:
+        """Fetch the account's order page, including recent completed orders."""
         data = await self._request("GET", ACTIVE_ORDERS_URL)
         if not isinstance(data, dict) or not isinstance(data.get("orders"), list):
-            raise WoltInvalidPayloadError("Wolt active orders payload is invalid")
-        return [
-            order
-            for order in data["orders"]
-            if isinstance(order, dict) and _active_order(order)
-        ]
+            raise WoltInvalidPayloadError("Wolt orders payload is invalid")
+        return [order for order in data["orders"] if isinstance(order, dict)]
+
+    async def fetch_active_orders(self) -> list[dict[str, Any]]:
+        """Fetch only trackable active orders from the account's order page."""
+        return [order for order in await self.fetch_orders() if is_active_order(order)]
 
     async def fetch_order_details(self, purchase_id: str) -> dict[str, Any]:
         """Fetch rich purchase-tracking details for an order."""

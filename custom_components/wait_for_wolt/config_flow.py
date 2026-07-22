@@ -3,7 +3,11 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
-from homeassistant.helpers.selector import TextSelector
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .const import (
     CONF_BEARER_TOKEN,
@@ -14,6 +18,9 @@ from .const import (
     DOMAIN,
 )
 
+SECRET_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+REQUIRED_SECRET = vol.All(SECRET_SELECTOR, vol.Length(min=1))
+
 
 class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Wait for Wolt."""
@@ -22,9 +29,9 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     DATA_SCHEMA = vol.Schema(
         {
-            vol.Optional(CONF_SESSION_ID, default=""): str,
-            vol.Required(CONF_BEARER_TOKEN): str,
-            vol.Required(CONF_REFRESH_TOKEN): str,
+            vol.Optional(CONF_SESSION_ID, default=""): SECRET_SELECTOR,
+            vol.Required(CONF_BEARER_TOKEN): REQUIRED_SECRET,
+            vol.Required(CONF_REFRESH_TOKEN): REQUIRED_SECRET,
             vol.Optional(CONF_VENUE_IDS, default=""): TextSelector({"multiline": True}),
             vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
         }
@@ -62,6 +69,33 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data=data,
         )
 
+    async def async_step_reauth(self, entry_data):
+        """Start reauthentication after the coordinator rejects credentials."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        """Replace rejected credentials and reload the config entry."""
+        entry = self._get_reauth_entry()
+        if user_input is not None:
+            return self.async_update_reload_and_abort(
+                entry,
+                data_updates={
+                    CONF_SESSION_ID: user_input.get(CONF_SESSION_ID)
+                    or entry.data.get(CONF_SESSION_ID, ""),
+                    CONF_BEARER_TOKEN: user_input[CONF_BEARER_TOKEN],
+                    CONF_REFRESH_TOKEN: user_input[CONF_REFRESH_TOKEN],
+                },
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_SESSION_ID, default=""): SECRET_SELECTOR,
+                vol.Required(CONF_BEARER_TOKEN): REQUIRED_SECRET,
+                vol.Required(CONF_REFRESH_TOKEN): REQUIRED_SECRET,
+            }
+        )
+        return self.async_show_form(step_id="reauth_confirm", data_schema=schema)
+
     @staticmethod
     def async_get_options_flow(config_entry):
         return WoltOptionsFlowHandler(config_entry)
@@ -84,8 +118,10 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 data={
                     **self.config_entry.data,
                     CONF_SESSION_ID: user_input.get(CONF_SESSION_ID, ""),
-                    CONF_BEARER_TOKEN: user_input[CONF_BEARER_TOKEN],
-                    CONF_REFRESH_TOKEN: user_input[CONF_REFRESH_TOKEN],
+                    CONF_BEARER_TOKEN: user_input.get(CONF_BEARER_TOKEN)
+                    or self.config_entry.data[CONF_BEARER_TOKEN],
+                    CONF_REFRESH_TOKEN: user_input.get(CONF_REFRESH_TOKEN)
+                    or self.config_entry.data[CONF_REFRESH_TOKEN],
                 },
                 options=options,
             )
@@ -103,16 +139,10 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             {
                 vol.Optional(
                     CONF_SESSION_ID,
-                    default=self.config_entry.data.get(CONF_SESSION_ID, ""),
-                ): str,
-                vol.Required(
-                    CONF_BEARER_TOKEN,
-                    default=self.config_entry.data.get(CONF_BEARER_TOKEN, ""),
-                ): str,
-                vol.Required(
-                    CONF_REFRESH_TOKEN,
-                    default=self.config_entry.data.get(CONF_REFRESH_TOKEN, ""),
-                ): str,
+                    default="",
+                ): SECRET_SELECTOR,
+                vol.Optional(CONF_BEARER_TOKEN, default=""): SECRET_SELECTOR,
+                vol.Optional(CONF_REFRESH_TOKEN, default=""): SECRET_SELECTOR,
                 vol.Optional(CONF_VENUE_IDS, default=current): TextSelector(
                     {"multiline": True}
                 ),

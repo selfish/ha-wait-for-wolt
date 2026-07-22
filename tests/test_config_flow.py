@@ -2,7 +2,7 @@
 
 from unittest.mock import AsyncMock, patch
 
-from homeassistant.config_entries import SOURCE_IMPORT, SOURCE_USER
+from homeassistant.config_entries import SOURCE_IMPORT, SOURCE_REAUTH, SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -121,6 +121,66 @@ async def test_options_update_credentials_venues_and_reload(
         "sanitized-venue",
         "second-sanitized-venue",
     ]
+
+
+async def test_options_blank_secret_fields_preserve_saved_tokens(
+    hass: HomeAssistant,
+) -> None:
+    """Do not expose or erase saved tokens when only venue options change."""
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SESSION_ID: "",
+            CONF_BEARER_TOKEN: "",
+            CONF_REFRESH_TOKEN: "",
+            CONF_VENUE_IDS: "second-sanitized-venue",
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.data[CONF_SESSION_ID] == ""
+    assert entry.data[CONF_BEARER_TOKEN] == "sanitized-access-token"
+    assert entry.data[CONF_REFRESH_TOKEN] == "sanitized-refresh-token"
+
+
+async def test_reauthentication_updates_credentials_and_reloads(
+    hass: HomeAssistant,
+) -> None:
+    """Replace rejected secrets through Home Assistant's reauth flow."""
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+        data=entry.data,
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    with patch.object(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    ) as reload_entry:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_SESSION_ID: "",
+                CONF_BEARER_TOKEN: "sanitized-access-token-next",
+                CONF_REFRESH_TOKEN: "sanitized-refresh-token-next",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_SESSION_ID] == "sanitized-session-id"
+    assert entry.data[CONF_BEARER_TOKEN] == "sanitized-access-token-next"
+    assert entry.data[CONF_REFRESH_TOKEN] == "sanitized-refresh-token-next"
+    reload_entry.assert_awaited_once_with(entry.entry_id)
 
 
 async def test_credential_only_options_update_reloads_running_entry(

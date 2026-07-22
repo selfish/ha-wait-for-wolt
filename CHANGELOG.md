@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   connectivity, rate-limit, and payload errors.
 - Rich purchase-tracking endpoint support with current and legacy response-shape
   compatibility.
+- A shared `DataUpdateCoordinator` with dynamic order discovery and Home
+  Assistant reauthentication support.
+- Privacy-preserving diagnostics that expose operational counts without order,
+  courier, venue, account-name, or credential values.
 
 ### Changed
 
@@ -26,6 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   deprecated as a runtime credential source.
 - The minimum supported Home Assistant version is now 2026.7.0, matching the
   tested Python and Home Assistant environment.
+- Authenticated polling adapts from five minutes while idle to 30 seconds while
+  an order is active; venue polling uses a conservative five-minute interval.
+- Credential inputs are password-masked, and options no longer prefill saved
+  access or refresh tokens.
 
 ### Fixed
 
@@ -34,6 +42,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   of racing rotating refresh tokens.
 - Malformed JSON responses become typed payload errors instead of escaping the
   integration update path.
+- Optional rich tracking failures now preserve the usable order summary instead
+  of making every order entity unavailable.
+- Venue sensors now preserve an explicit closed status even when broader venue
+  metadata still reports the venue online.
 
 ### Security
 
