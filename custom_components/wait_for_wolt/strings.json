@@ -1,5 +1,8 @@
 {
   "config": {
+    "abort": {
+      "already_configured": "A Wolt account is already configured. Remove the legacy YAML block after it has been imported."
+    },
     "step": {
       "user": {
         "title": "Set up Wolt account",

@@ -14,6 +14,11 @@ PLATFORMS = [Platform.SENSOR]
 CONFIG_SCHEMA = cv.platform_only_config_schema(DOMAIN)
 
 
+def _entry_snapshot(entry: ConfigEntry) -> dict[str, dict]:
+    """Return the entry values used by the currently loaded runtime."""
+    return {"data": dict(entry.data), "options": dict(entry.options)}
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up via YAML (handled by the sensor platform)."""
     return True
@@ -21,9 +26,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Forward config entry setup to the sensor platform."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = dict(entry.options)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = _entry_snapshot(entry)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except Exception:
+        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        raise
     return True
 
 
@@ -37,6 +46,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload after user options change, but not after token rotation."""
-    if hass.data.get(DOMAIN, {}).get(entry.entry_id) == entry.options:
+    if hass.data.get(DOMAIN, {}).get(entry.entry_id) == _entry_snapshot(entry):
         return
     await hass.config_entries.async_reload(entry.entry_id)

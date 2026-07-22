@@ -1,240 +1,356 @@
-"""Tests for Wolt API request and payload handling."""
+"""Synthetic offline tests for the Home Assistant-independent Wolt API client."""
 
-import json
-from collections.abc import Callable
-from pathlib import Path
+import asyncio
+from collections import deque
 from typing import Any
-from unittest.mock import AsyncMock
 
 import aiohttp
 import pytest
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
+from custom_components.wait_for_wolt.api import (
+    WoltApi,
+    WoltAuthenticationError,
+    WoltConnectionError,
+    WoltInvalidPayloadError,
+    WoltRateLimitError,
+)
 from custom_components.wait_for_wolt.const import (
     ACTIVE_ORDERS_URL,
+    ORDER_DETAILS_URL,
     REFRESH_URL,
     VENUE_CONTENT_URL,
 )
-from custom_components.wait_for_wolt.sensor import WoltApi
 
 
-@pytest.fixture
-def api() -> WoltApi:
-    """Return an API client containing only sanitized credentials."""
+class FakeResponse:
+    """Minimal asynchronous response implementing the API client's contract."""
+
+    def __init__(self, status: int, payload: Any = None) -> None:
+        self.status = status
+        self._payload = payload
+
+    async def json(self) -> Any:
+        if isinstance(self._payload, BaseException):
+            raise self._payload
+        return self._payload
+
+
+class FakeRequestContext:
+    """Minimal aiohttp request context manager."""
+
+    def __init__(self, response: FakeResponse | BaseException) -> None:
+        self._response = response
+
+    async def __aenter__(self) -> FakeResponse:
+        if isinstance(self._response, BaseException):
+            raise self._response
+        return self._response
+
+    async def __aexit__(self, *_args: Any) -> None:
+        return None
+
+
+class FakeSession:
+    """Queue deterministic responses and record requests without network access."""
+
+    def __init__(self, *responses: FakeResponse | BaseException) -> None:
+        self._responses = deque(responses)
+        self.calls: list[dict[str, Any]] = []
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        data: dict[str, str] | None = None,
+    ) -> FakeRequestContext:
+        self.calls.append(
+            {
+                "method": method,
+                "url": url,
+                "headers": dict(headers),
+                "data": data,
+            }
+        )
+        return FakeRequestContext(self._responses.popleft())
+
+    def post(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        data: dict[str, str],
+    ) -> FakeRequestContext:
+        return self.request("POST", url, headers=headers, data=data)
+
+
+def make_api(session: FakeSession, session_id: str | None = "test-session") -> WoltApi:
+    """Create an API client containing only synthetic credentials."""
     return WoltApi(
-        AsyncMock(spec=aiohttp.ClientSession),
-        "sanitized-session-id",
-        "sanitized-access-token",
-        "sanitized-refresh-token",
+        session,  # type: ignore[arg-type]
+        session_id,
+        "test-access-token",
+        "test-refresh-token",
     )
 
 
-@pytest.fixture
-def load_json_fixture() -> Callable[[str], Any]:
-    """Load a sanitized Wolt response fixture."""
+async def test_active_orders_success_uses_current_token_first() -> None:
+    """Use a valid access token without refreshing it preemptively."""
+    payload = {
+        "orders": [
+            {
+                "purchase_id": "purchase-001",
+                "telemetry": {"order_status_type": "IN_PROGRESS"},
+            }
+        ]
+    }
+    session = FakeSession(FakeResponse(200, payload))
 
-    def _load(name: str) -> Any:
-        return json.loads((Path(__file__).parent / "fixtures" / name).read_text())
+    assert await make_api(session).fetch_active_orders() == payload["orders"]
+    assert len(session.calls) == 1
+    assert session.calls[0]["url"] == ACTIVE_ORDERS_URL
+    assert session.calls[0]["headers"]["authorization"] == ("Bearer test-access-token")
+    assert session.calls[0]["headers"]["w-wolt-session-id"] == "test-session"
 
-    return _load
+
+async def test_active_orders_excludes_completed_history() -> None:
+    """Do not create entities for completed orders returned by the orders page."""
+    active = {
+        "purchase_id": "purchase-active",
+        "telemetry": {"order_status_type": "IN_PROGRESS"},
+    }
+    completed = {
+        "purchase_id": "purchase-complete",
+        "telemetry": {"order_status_type": "DELIVERED"},
+    }
+    session = FakeSession(FakeResponse(200, {"orders": [active, completed]}))
+
+    assert await make_api(session).fetch_active_orders() == [active]
 
 
 @pytest.mark.parametrize(
-    ("fixture_name", "expected"),
+    ("method_name", "payload", "args"),
     [
+        ("fetch_active_orders", {"orders": {"unexpected": "shape"}}, ()),
         (
-            "active_orders.json",
-            [
-                {
-                    "purchase_id": "sanitized-purchase-001",
-                    "status": {"value": "In progress"},
-                    "telemetry": {"order_status_type": "IN_PROGRESS"},
-                    "call_to_action": {"link": "ORDER_TRACKING"},
-                    "venue": {"name": "Sanitized Test Venue"},
-                }
-            ],
+            "fetch_order_details",
+            {"order_details": "unexpected-shape"},
+            ("purchase-001",),
         ),
-        ("empty_orders.json", []),
-        ("malformed_orders.json", []),
+        ("fetch_venue_details", {"venue": ["unexpected-shape"]}, ("venue",)),
     ],
 )
-async def test_active_order_payload_contract(
-    api: WoltApi,
-    load_json_fixture: Callable[[str], Any],
-    fixture_name: str,
-    expected: list[dict[str, str]],
+async def test_malformed_payloads_raise_typed_exception(
+    method_name: str,
+    payload: dict[str, Any],
+    args: tuple[str, ...],
 ) -> None:
-    """Accept order lists and reject incompatible response shapes safely."""
-    api._request = AsyncMock(return_value=load_json_fixture(fixture_name))
+    """Report incompatible endpoint payloads instead of silently accepting them."""
+    api = make_api(FakeSession(FakeResponse(200, payload)))
 
-    assert await api.fetch_active_orders() == expected
+    with pytest.raises(WoltInvalidPayloadError):
+        await getattr(api, method_name)(*args)
 
 
-async def test_detail_payload_contracts(
-    api: WoltApi,
-    load_json_fixture: Callable[[str], Any],
-) -> None:
-    """Reject malformed order and venue payloads without raising."""
-    api._request = AsyncMock(
-        return_value=load_json_fixture("malformed_order_details.json")
+async def test_malformed_json_raises_typed_payload_exception() -> None:
+    """Translate JSON decoding failures from an otherwise successful response."""
+    api = make_api(FakeSession(FakeResponse(200, ValueError("malformed JSON"))))
+
+    with pytest.raises(WoltInvalidPayloadError):
+        await api.fetch_active_orders()
+
+
+async def test_unauthorized_request_refreshes_persists_and_retries_once() -> None:
+    """Refresh only after 401, expose rotation, notify persistence, and retry once."""
+    rotated = ("next-access-token", "next-refresh-token")
+    session = FakeSession(
+        FakeResponse(401),
+        FakeResponse(
+            200,
+            {"access_token": rotated[0], "refresh_token": rotated[1]},
+        ),
+        FakeResponse(
+            200,
+            {
+                "orders": [
+                    {
+                        "purchase_id": "purchase-001",
+                        "telemetry": {"order_status_type": "IN_PROGRESS"},
+                    }
+                ]
+            },
+        ),
     )
-    assert await api.fetch_order_details("sanitized-order-001") is None
+    persisted: list[tuple[str, str]] = []
 
-    api._request = AsyncMock(return_value=load_json_fixture("malformed_venue.json"))
-    assert await api.fetch_venue_details("sanitized-venue") is None
+    async def persist_tokens(access_token: str, refresh_token: str) -> None:
+        persisted.append((access_token, refresh_token))
 
+    api = WoltApi(
+        session,  # type: ignore[arg-type]
+        "test-session",
+        "test-access-token",
+        "test-refresh-token",
+        token_update_callback=persist_tokens,
+    )
 
-async def test_authenticated_request_uses_current_access_token_without_refresh(
-    hass: HomeAssistant,
-    aioclient_mock: AiohttpClientMocker,
-    load_json_fixture: Callable[[str], Any],
-) -> None:
-    """Avoid rotating a valid Wolt access token before every request."""
-    aioclient_mock.get(
+    assert await api.fetch_active_orders() == [
+        {
+            "purchase_id": "purchase-001",
+            "telemetry": {"order_status_type": "IN_PROGRESS"},
+        }
+    ]
+    assert [call["url"] for call in session.calls] == [
         ACTIVE_ORDERS_URL,
-        json=load_json_fixture("active_orders.json"),
-    )
-    api = WoltApi(
-        async_get_clientsession(hass),
-        "sanitized-session-id",
-        "sanitized-access-token",
-        "sanitized-refresh-token",
-    )
-
-    orders = await api.fetch_active_orders()
-
-    assert orders[0]["purchase_id"] == "sanitized-purchase-001"
-    assert aioclient_mock.call_count == 1
-    orders_call = aioclient_mock.mock_calls[0]
-    assert orders_call[3]["authorization"] == "Bearer sanitized-access-token"
-    assert orders_call[3]["w-wolt-session-id"] == "sanitized-session-id"
-
-
-async def test_unauthorized_request_refreshes_persists_and_retries_once(
-    hass: HomeAssistant,
-    aioclient_mock: AiohttpClientMocker,
-    load_json_fixture: Callable[[str], Any],
-) -> None:
-    """Use Wolt's current refresh flow and persist rotated credentials."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-    from custom_components.wait_for_wolt.const import DOMAIN
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "session_id": "sanitized-session-id",
-            "bearer_token": "sanitized-access-token",
-            "refresh_token": "sanitized-refresh-token",
-        },
-    )
-    entry.add_to_hass(hass)
-    orders_response = aioclient_mock.request("get", ACTIVE_ORDERS_URL, status=401)
-
-    async def refresh_then_allow_retry(_method: Any, _url: Any, _data: Any) -> Any:
-        orders_response.status = 200
-        orders_response._response = json.dumps(
-            load_json_fixture("active_orders.json")
-        ).encode()
-        return refresh_response
-
-    refresh_response = aioclient_mock.request(
-        "post",
         REFRESH_URL,
-        json=load_json_fixture("token_refresh.json"),
-        side_effect=refresh_then_allow_retry,
-    )
-    api = WoltApi(
-        async_get_clientsession(hass),
-        "sanitized-session-id",
-        "sanitized-access-token",
-        "sanitized-refresh-token",
-        hass=hass,
-        entry=entry,
-    )
-
-    orders = await api.fetch_active_orders()
-
-    assert orders[0]["purchase_id"] == "sanitized-purchase-001"
-    assert aioclient_mock.call_count == 3
-    first_order_call, refresh_call, retry_call = aioclient_mock.mock_calls
-    assert first_order_call[3]["authorization"] == "Bearer sanitized-access-token"
-    assert refresh_call[2] == {
+        ACTIVE_ORDERS_URL,
+    ]
+    assert session.calls[1]["method"] == "POST"
+    assert session.calls[1]["data"] == {
         "grant_type": "refresh_token",
-        "refresh_token": "sanitized-refresh-token",
+        "refresh_token": "test-refresh-token",
     }
-    assert retry_call[3]["authorization"] == "Bearer sanitized-access-token-next"
-    assert entry.data["bearer_token"] == "sanitized-access-token-next"
-    assert entry.data["refresh_token"] == "sanitized-refresh-token-next"
+    assert session.calls[2]["headers"]["authorization"] == ("Bearer next-access-token")
+    assert api.access_token == rotated[0]
+    assert api.refresh_token == rotated[1]
+    assert persisted == [rotated]
 
 
-async def test_authentication_failure_stops_order_request(
-    hass: HomeAssistant,
-    aioclient_mock: AiohttpClientMocker,
-    load_json_fixture: Callable[[str], Any],
-    caplog: pytest.LogCaptureFixture,
+async def test_concurrent_unauthorized_requests_share_one_token_refresh() -> None:
+    """Serialize concurrent 401 recovery when refresh tokens rotate once."""
+    api = make_api(FakeSession())
+    both_initial_requests_started = asyncio.Event()
+    initial_requests = 0
+    refreshes = 0
+
+    async def perform_request(
+        _method: str,
+        url: str,
+        *,
+        authenticated: bool,
+        data: dict[str, str] | None = None,
+    ) -> Any:
+        nonlocal initial_requests
+        del data
+        if (
+            url == ACTIVE_ORDERS_URL
+            and authenticated
+            and api.access_token == "test-access-token"
+        ):
+            initial_requests += 1
+            if initial_requests == 2:
+                both_initial_requests_started.set()
+            await both_initial_requests_started.wait()
+            raise WoltAuthenticationError("expired", status=401)
+        return {"orders": []}
+
+    async def refresh_access_token() -> None:
+        nonlocal refreshes
+        refreshes += 1
+        api._access_token = "next-access-token"
+
+    api._perform_request = perform_request  # type: ignore[method-assign]
+    api._refresh_access_token = refresh_access_token  # type: ignore[method-assign]
+
+    first, second = await asyncio.gather(
+        api.fetch_active_orders(), api.fetch_active_orders()
+    )
+
+    assert first == second == []
+    assert initial_requests == 2
+    assert refreshes == 1
+
+
+@pytest.mark.parametrize("failed_status", [400, 401, 403])
+async def test_authentication_failure_raises_without_looping(
+    failed_status: int,
 ) -> None:
-    """Retry authentication once, then stop instead of looping with stale credentials."""
-    aioclient_mock.get(ACTIVE_ORDERS_URL, status=401)
-    aioclient_mock.post(
-        REFRESH_URL,
-        status=401,
-        json=load_json_fixture("auth_failure.json"),
-    )
-    api = WoltApi(
-        async_get_clientsession(hass),
-        "sanitized-session-id",
-        "sanitized-access-token",
-        "sanitized-refresh-token",
+    """Surface refresh rejection as typed authentication failure."""
+    session = FakeSession(
+        FakeResponse(401), FakeResponse(failed_status, {"error": "no"})
     )
 
-    assert await api.fetch_active_orders() == []
-    assert aioclient_mock.call_count == 2
-    assert "Token refresh failed" in caplog.text
-    assert "sanitized-refresh-token" not in caplog.text
+    with pytest.raises(WoltAuthenticationError):
+        await make_api(session).fetch_active_orders()
+
+    assert len(session.calls) == 2
 
 
-async def test_authenticated_request_omits_missing_session_header(
-    hass: HomeAssistant,
-    aioclient_mock: AiohttpClientMocker,
-    load_json_fixture: Callable[[str], Any],
+async def test_second_unauthorized_response_raises_without_refresh_loop() -> None:
+    """Retry the authenticated endpoint only once after successful refresh."""
+    session = FakeSession(
+        FakeResponse(401),
+        FakeResponse(200, {"access_token": "next-access-token"}),
+        FakeResponse(401),
+    )
+
+    with pytest.raises(WoltAuthenticationError):
+        await make_api(session).fetch_active_orders()
+
+    assert len(session.calls) == 3
+
+
+@pytest.mark.parametrize("session_id", [None, ""])
+async def test_authenticated_request_omits_optional_session_header(
+    session_id: str | None,
 ) -> None:
-    """Support Wolt accounts that do not expose the analytics session cookie."""
-    aioclient_mock.get(
-        ACTIVE_ORDERS_URL,
-        json=load_json_fixture("active_orders.json"),
+    """Allow accounts without Wolt's optional analytics session identifier."""
+    session = FakeSession(FakeResponse(200, {"orders": []}))
+
+    assert await make_api(session, session_id).fetch_active_orders() == []
+    assert "w-wolt-session-id" not in session.calls[0]["headers"]
+
+
+async def test_public_venue_request_sends_no_account_headers() -> None:
+    """Never leak account credentials to the public venue endpoint."""
+    session = FakeSession(FakeResponse(200, {"venue": {"online": True}}))
+
+    result = await make_api(session).fetch_venue_details("test-venue")
+
+    assert result == {"venue": {"online": True}}
+    assert session.calls[0]["url"] == VENUE_CONTENT_URL.format("test-venue")
+    assert "authorization" not in session.calls[0]["headers"]
+    assert "w-wolt-session-id" not in session.calls[0]["headers"]
+
+
+async def test_order_details_uses_rich_purchase_tracking_endpoint() -> None:
+    """Fetch rich tracking details by purchase ID from restaurant-api."""
+    session = FakeSession(FakeResponse(200, {"order_details": {"status": "delivery"}}))
+
+    assert await make_api(session).fetch_order_details("purchase-001") == {
+        "status": "delivery"
+    }
+    assert session.calls[0]["url"] == ORDER_DETAILS_URL.format("purchase-001")
+    assert session.calls[0]["url"] == (
+        "https://restaurant-api.wolt.com/v2/order_details/purchase_tracking"
+        "?purchase_id=purchase-001"
     )
-    api = WoltApi(
-        async_get_clientsession(hass),
-        "",
-        "sanitized-access-token",
-        "sanitized-refresh-token",
+
+
+async def test_order_details_accepts_legacy_list_shape() -> None:
+    """Keep compatibility with the earlier sanitized tracking fixture shape."""
+    session = FakeSession(
+        FakeResponse(200, {"order_details": [{"status": "delivery"}]})
     )
 
-    assert await api.fetch_active_orders()
-    headers = aioclient_mock.mock_calls[0][3]
-    assert "w-wolt-session-id" not in headers
+    assert await make_api(session).fetch_order_details("purchase-001") == {
+        "status": "delivery"
+    }
 
 
-async def test_public_venue_request_sends_no_account_headers(
-    hass: HomeAssistant,
-    aioclient_mock: AiohttpClientMocker,
-    load_json_fixture: Callable[[str], Any],
+@pytest.mark.parametrize(
+    ("response", "exception_type"),
+    [
+        (TimeoutError(), WoltConnectionError),
+        (aiohttp.ClientConnectionError(), WoltConnectionError),
+        (FakeResponse(429), WoltRateLimitError),
+    ],
+)
+async def test_transport_and_rate_limit_failures_are_typed(
+    response: FakeResponse | BaseException,
+    exception_type: type[Exception],
 ) -> None:
-    """Keep account credentials off the public venue endpoint."""
-    url = VENUE_CONTENT_URL.format("sanitized-venue")
-    aioclient_mock.get(url, json=load_json_fixture("venue_open.json"))
-    api = WoltApi(
-        async_get_clientsession(hass),
-        "sanitized-session-id",
-        "sanitized-access-token",
-        "sanitized-refresh-token",
-    )
-
-    assert await api.fetch_venue_details("sanitized-venue") is not None
-    assert aioclient_mock.call_count == 1
-    headers = aioclient_mock.mock_calls[0][3]
-    assert "authorization" not in headers
-    assert "w-wolt-session-id" not in headers
+    """Distinguish retryable connectivity and rate-limit failures."""
+    with pytest.raises(exception_type):
+        await make_api(FakeSession(response)).fetch_active_orders()

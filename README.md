@@ -1,8 +1,10 @@
 # ha-wait-for-wolt
 
-This custom component tracks your Wolt orders in Home Assistant. It polls the Wolt API using tokens that you obtain once from the web site and keeps them refreshed automatically.
+This custom component tracks your Wolt orders in Home Assistant. It polls the Wolt API using tokens that you obtain once from the web site and persists refreshed credentials in a Home Assistant config entry.
 
 ## Installation via HACS
+Requires Home Assistant 2026.7.0 or newer.
+
 1. Add this repository as a custom repository in [HACS](https://hacs.xyz/).
 2. Install **Wolt Order Tracker** and restart Home Assistant.
 
@@ -43,8 +45,13 @@ capture them is from your web browser after logging in.
 
 
 ## Configuration
-You can add the integration from Home Assistant's **Add Integration** menu or via YAML.
-To configure with YAML, add a sensor entry to `configuration.yaml`:
+Add the integration from Home Assistant's **Add Integration** menu. This is the
+supported configuration path and keeps rotated Wolt credentials durable across
+Home Assistant restarts.
+
+Legacy YAML is imported once for migration. If you already have the following
+sensor entry, restart Home Assistant, confirm that the UI integration was created,
+then remove the YAML block:
 
 ```yaml
 sensor:
@@ -58,6 +65,9 @@ sensor:
       - mententen
       - another-venue
 ```
+
+Do not keep YAML as a credential backup: Wolt may rotate refresh tokens, and the
+imported config entry becomes the authoritative credential store.
 
 `venue_ids` should be the slug from the venue URL on wolt.com. For example,
 `https://wolt.com/en/isr/tel-aviv/restaurant/mententen` uses `mententen` as the
