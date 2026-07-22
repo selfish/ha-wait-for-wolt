@@ -80,4 +80,6 @@ ID on a new line.
 ## Development
 
 See [Development and verification](docs/DEVELOPMENT.md) for locked setup commands,
-sanitized-fixture rules, CI validation, and exact-commit review artifacts.
+sanitized-fixture rules, CI validation, and exact-commit review artifacts. Contributions
+must follow the [contributor guide](CONTRIBUTING.md) and [security policy](SECURITY.md).
+Release-facing changes are recorded in the [changelog](CHANGELOG.md).

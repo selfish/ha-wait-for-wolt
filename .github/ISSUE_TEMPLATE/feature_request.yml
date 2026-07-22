@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a Home Assistant or Wolt-tracking improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Explain the user outcome rather than only the implementation. Remember that Wolt's consumer API is private and unsupported; proposed polling must be conservative.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or automation goal
+      description: What are you trying to accomplish in Home Assistant?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe entities, events, services, or UI behavior and any useful alternatives.
+    validations:
+      required: true
+  - type: textarea
+    id: api_impact
+    attributes:
+      label: Wolt API and privacy impact
+      description: Note new endpoints, polling frequency, stored data, or diagnostics implications. Do not include real payloads or credentials.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: I have not included tokens, cookies, addresses, order data, IDs, or courier coordinates.
+          required: true
