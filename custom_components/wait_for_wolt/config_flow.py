@@ -46,6 +46,22 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(step_id="user", data_schema=self.DATA_SCHEMA)
 
+    async def async_step_import(self, import_data):
+        """Import a legacy YAML platform into a durable config entry."""
+        if self._async_current_entries():
+            return self.async_abort(reason="already_configured")
+
+        data = dict(import_data)
+        data[CONF_SESSION_ID] = data.get(CONF_SESSION_ID, "")
+        venues = data.get(CONF_VENUE_IDS, [])
+        if isinstance(venues, str):
+            venues = [venue.strip() for venue in venues.split("\n") if venue.strip()]
+        data[CONF_VENUE_IDS] = list(venues)
+        return self.async_create_entry(
+            title=data.get(CONF_NAME, DEFAULT_NAME),
+            data=data,
+        )
+
     @staticmethod
     def async_get_options_flow(config_entry):
         return WoltOptionsFlowHandler(config_entry)
@@ -62,6 +78,7 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 if v.strip()
             ]
 
+            options = {CONF_VENUE_IDS: venue_ids}
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
                 data={
@@ -70,10 +87,11 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     CONF_BEARER_TOKEN: user_input[CONF_BEARER_TOKEN],
                     CONF_REFRESH_TOKEN: user_input[CONF_REFRESH_TOKEN],
                 },
+                options=options,
             )
             return self.async_create_entry(
                 title="",
-                data={CONF_VENUE_IDS: venue_ids},
+                data=options,
             )
 
         current = "\n".join(

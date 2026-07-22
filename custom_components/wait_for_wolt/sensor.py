@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
-import aiohttp
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -20,18 +18,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
+from .api import WoltApi, WoltApiError
 from .const import (
-    ACTIVE_ORDERS_URL,
     CONF_BEARER_TOKEN,
     CONF_REFRESH_TOKEN,
     CONF_SESSION_ID,
     CONF_VENUE_IDS,
     DEFAULT_NAME,
-    HEADERS,
-    ORDER_DETAILS_URL,
-    REFRESH_URL,
+    DOMAIN,
     UPDATE_INTERVAL,
-    VENUE_CONTENT_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,7 +54,31 @@ async def _setup_sensors(
 ) -> Callable[[], None]:
     """Create sensors and schedule updates."""
     session = async_get_clientsession(hass)
-    api = WoltApi(session, session_id, token, refresh, hass=hass, entry=entry)
+
+    def _persist_tokens(access_token: str, refresh_token: str) -> None:
+        if entry is None:
+            return
+        updated_data = {
+            **entry.data,
+            CONF_BEARER_TOKEN: access_token,
+            CONF_REFRESH_TOKEN: refresh_token,
+        }
+        runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+        if isinstance(runtime, dict):
+            runtime["data"] = dict(updated_data)
+            runtime["options"] = dict(entry.options)
+        hass.config_entries.async_update_entry(
+            entry,
+            data=updated_data,
+        )
+
+    api = WoltApi(
+        session,
+        session_id,
+        token,
+        refresh,
+        token_update_callback=_persist_tokens if entry is not None else None,
+    )
 
     sensors: list[WoltOrderSensor] = []
     venue_sensors: list[WoltVenueSensor] = []
@@ -70,7 +89,11 @@ async def _setup_sensors(
         async_add_entities(venue_sensors, update_before_add=True)
 
     async def _update_orders(now=None, *, update_before_add: bool = False) -> None:
-        orders = await api.fetch_active_orders()
+        try:
+            orders = await api.fetch_active_orders()
+        except WoltApiError as err:
+            _LOGGER.warning("Unable to fetch active Wolt orders: %s", err)
+            return
         known = {sensor.order_id for sensor in sensors}
         new_entities = []
         for order in orders:
@@ -92,143 +115,28 @@ async def _setup_sensors(
     )
 
 
-class WoltApi:
-    """Simple wrapper for the Wolt API."""
-
-    def __init__(
-        self,
-        session: aiohttp.ClientSession,
-        session_id: str,
-        token: str,
-        refresh: str,
-        *,
-        hass: HomeAssistant | None = None,
-        entry: ConfigEntry | None = None,
-    ) -> None:
-        self._session = session
-        self._session_id = session_id
-        self._token = token
-        self._refresh = refresh
-        self._hass = hass
-        self._entry = entry
-
-    async def _refresh_token(self) -> bool:
-        """Refresh and persist the bearer token using Wolt's current web flow."""
-        payload = {
-            "grant_type": "refresh_token",
-            "refresh_token": self._refresh,
-        }
-        try:
-            async with asyncio.timeout(10):
-                async with self._session.post(
-                    REFRESH_URL, data=payload, headers=HEADERS
-                ) as resp:
-                    resp.raise_for_status()
-                    data = await resp.json()
-        except (TimeoutError, aiohttp.ClientError) as err:
-            _LOGGER.error("Token refresh failed: %s", err)
-            return False
-
-        access_token = (
-            data.get("access_token") or data.get("accessToken")
-            if isinstance(data, dict)
-            else None
-        )
-        if not isinstance(access_token, str):
-            _LOGGER.error("Token refresh returned an invalid response")
-            return False
-
-        self._token = access_token
-        refresh_token = data.get("refresh_token") or data.get("refreshToken")
-        if isinstance(refresh_token, str):
-            self._refresh = refresh_token
-        if self._entry is not None and self._hass is not None:
-            self._hass.config_entries.async_update_entry(
-                self._entry,
-                data={
-                    **self._entry.data,
-                    CONF_BEARER_TOKEN: self._token,
-                    CONF_REFRESH_TOKEN: self._refresh,
-                },
-            )
-        return True
-
-    async def _request(self, method: str, url: str, auth: bool = True) -> Any:
-        """Make a request, refreshing and retrying once only after a 401."""
-        headers = {**HEADERS}
-        if auth:
-            headers["authorization"] = f"Bearer {self._token}"
-            if self._session_id:
-                headers["w-wolt-session-id"] = self._session_id
-        try:
-            async with asyncio.timeout(10):
-                async with self._session.request(method, url, headers=headers) as resp:
-                    if auth and resp.status == 401:
-                        if not await self._refresh_token():
-                            return None
-                        retry_headers = {
-                            **headers,
-                            "authorization": f"Bearer {self._token}",
-                        }
-                        async with self._session.request(
-                            method, url, headers=retry_headers
-                        ) as retry_resp:
-                            retry_resp.raise_for_status()
-                            return await retry_resp.json()
-                    resp.raise_for_status()
-                    return await resp.json()
-        except (TimeoutError, aiohttp.ClientError, aiohttp.ContentTypeError) as err:
-            _LOGGER.error("Error requesting %s: %s", url, err)
-            return None
-
-    async def fetch_active_orders(self) -> list[dict[str, Any]]:
-        data = await self._request("GET", ACTIVE_ORDERS_URL)
-        if not isinstance(data, dict):
-            return []
-        orders = data.get("orders")
-        if not isinstance(orders, list):
-            return []
-        return [order for order in orders if isinstance(order, dict)]
-
-    async def fetch_order_details(self, order_id: str) -> dict[str, Any] | None:
-        url = ORDER_DETAILS_URL.format(order_id)
-        data = await self._request("GET", url)
-        if not isinstance(data, dict):
-            return None
-        details = data.get("order_details")
-        if not isinstance(details, list) or not details:
-            return None
-        return details[0] if isinstance(details[0], dict) else None
-
-    async def fetch_venue_details(self, slug: str) -> dict[str, Any] | None:
-        url = VENUE_CONTENT_URL.format(slug)
-        # Public endpoint - do not send authentication headers
-        data = await self._request("GET", url, auth=False)
-        if not isinstance(data, dict):
-            _LOGGER.warning("Bad response for venue: %s: %s", slug, data)
-            return None
-        venue = data.get("venue") or data.get("venue_info")
-        if not isinstance(venue, dict):
-            _LOGGER.warning("Bad response for venue: %s", slug)
-            return None
-        return data
-
-
 async def async_setup_platform(
     hass: HomeAssistant,
     config: ConfigType,
     async_add_entities: AddEntitiesCallback,
     discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
-    """Set up Wolt sensors from YAML."""
-    name = config[CONF_NAME]
-    session_id = config.get(CONF_SESSION_ID, "")
-    token = config[CONF_BEARER_TOKEN]
-    refresh = config[CONF_REFRESH_TOKEN]
-
-    venues = config.get(CONF_VENUE_IDS, [])
-    await _setup_sensors(
-        hass, async_add_entities, name, session_id, token, refresh, venues
+    """Import legacy YAML into a config entry with durable token rotation."""
+    del async_add_entities, discovery_info
+    _LOGGER.warning(
+        "YAML configuration for wait_for_wolt is deprecated; importing it into "
+        "the Home Assistant integration UI. Remove the YAML after import"
+    )
+    await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data={
+            CONF_NAME: config[CONF_NAME],
+            CONF_SESSION_ID: config.get(CONF_SESSION_ID, ""),
+            CONF_BEARER_TOKEN: config[CONF_BEARER_TOKEN],
+            CONF_REFRESH_TOKEN: config[CONF_REFRESH_TOKEN],
+            CONF_VENUE_IDS: config.get(CONF_VENUE_IDS, []),
+        },
     )
 
 
@@ -244,7 +152,7 @@ async def async_setup_entry(
         hass,
         async_add_entities,
         data.get(CONF_NAME, DEFAULT_NAME),
-        data[CONF_SESSION_ID],
+        data.get(CONF_SESSION_ID, ""),
         data[CONF_BEARER_TOKEN],
         data[CONF_REFRESH_TOKEN],
         venues,
@@ -272,13 +180,23 @@ class WoltOrderSensor(SensorEntity):
         return self._state
 
     async def async_update(self) -> None:
-        details = await self.api.fetch_order_details(self.order_id)
+        try:
+            details = await self.api.fetch_order_details(self.order_id)
+        except WoltApiError as err:
+            self._attr_available = False
+            _LOGGER.warning("Unable to update Wolt order %s: %s", self.order_id, err)
+            return
         if not details:
             self._attr_available = False
             _LOGGER.warning("Order %s details not found", self.order_id)
             return
         self._attr_available = True
-        self._state = details.get("status")
+        status = details.get("status")
+        if isinstance(status, dict):
+            status = status.get("value") or status.get("text") or status.get("label")
+        if status is None:
+            status = details.get("order_status_type")
+        self._state = str(status) if status is not None else None
         items = details.get("items")
         self._attr_extra_state_attributes = {
             "delivery_eta": details.get("delivery_eta"),
@@ -312,7 +230,12 @@ class WoltVenueSensor(SensorEntity):
         return self._state
 
     async def async_update(self) -> None:
-        details = await self.api.fetch_venue_details(self.slug)
+        try:
+            details = await self.api.fetch_venue_details(self.slug)
+        except WoltApiError as err:
+            self._attr_available = False
+            _LOGGER.warning("Unable to update Wolt venue %s: %s", self.slug, err)
+            return
         if not details:
             self._attr_available = False
             _LOGGER.warning("Venue %s details not found", self.slug)
