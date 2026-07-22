@@ -22,15 +22,6 @@ REQUEST_TIMEOUT = 10
 
 TokenUpdateCallback = Callable[[str, str], Awaitable[None] | None]
 
-FINAL_ORDER_STATUS_TYPES = {
-    "DELIVERED",
-    "CANCELED",
-    "CANCELLED",
-    "REFUNDED",
-    "REJECTED",
-    "FAILED",
-}
-
 
 def is_active_order(order: dict[str, Any]) -> bool:
     """Return whether an order-list item represents a trackable active order."""
@@ -40,12 +31,11 @@ def is_active_order(order: dict[str, Any]) -> bool:
         if isinstance(telemetry, dict)
         else order.get("order_status_type")
     )
-    if status_type:
-        normalized = str(status_type).upper()
-        if normalized == "IN_PROGRESS":
-            return True
-        if normalized in FINAL_ORDER_STATUS_TYPES:
-            return False
+    if status_type is not None:
+        # Current Wolt order-list payloads provide an authoritative telemetry
+        # state. Do not let legacy CTA/text heuristics override any non-active
+        # telemetry value such as COMPLETED or PENDING.
+        return str(status_type).upper() == "IN_PROGRESS"
 
     call_to_action = order.get("call_to_action")
     if isinstance(call_to_action, dict):

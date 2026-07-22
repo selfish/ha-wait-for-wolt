@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_NAME
 from homeassistant.helpers.selector import (
     TextSelector,
@@ -77,14 +78,24 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Replace rejected credentials and reload the config entry."""
         entry = self._get_reauth_entry()
         if user_input is not None:
+            data_updates = {
+                CONF_SESSION_ID: user_input.get(CONF_SESSION_ID)
+                or entry.data.get(CONF_SESSION_ID, ""),
+                CONF_BEARER_TOKEN: user_input[CONF_BEARER_TOKEN],
+                CONF_REFRESH_TOKEN: user_input[CONF_REFRESH_TOKEN],
+            }
+            if entry.state is ConfigEntryState.LOADED:
+                # The loaded entry's update listener owns the one required
+                # reload. Scheduling another here causes duplicate Wolt polls.
+                return self.async_update_and_abort(
+                    entry,
+                    data_updates=data_updates,
+                )
+            # First-refresh reauth has no update listener yet, so the flow must
+            # explicitly schedule setup with the replacement credentials.
             return self.async_update_reload_and_abort(
                 entry,
-                data_updates={
-                    CONF_SESSION_ID: user_input.get(CONF_SESSION_ID)
-                    or entry.data.get(CONF_SESSION_ID, ""),
-                    CONF_BEARER_TOKEN: user_input[CONF_BEARER_TOKEN],
-                    CONF_REFRESH_TOKEN: user_input[CONF_REFRESH_TOKEN],
-                },
+                data_updates=data_updates,
             )
 
         schema = vol.Schema(

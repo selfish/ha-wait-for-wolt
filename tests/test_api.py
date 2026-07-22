@@ -114,19 +114,38 @@ async def test_active_orders_success_uses_current_token_first() -> None:
     assert session.calls[0]["headers"]["w-wolt-session-id"] == "test-session"
 
 
-async def test_active_orders_excludes_completed_history() -> None:
-    """Do not create entities for completed orders returned by the orders page."""
+@pytest.mark.parametrize(
+    "status_type",
+    ["DELIVERED", "COMPLETED", "PENDING", "UNKNOWN", ""],
+)
+async def test_active_orders_rejects_every_non_active_telemetry_state(
+    status_type: str,
+) -> None:
+    """Treat telemetry as authoritative even when legacy hints look active."""
     active = {
         "purchase_id": "purchase-active",
         "telemetry": {"order_status_type": "IN_PROGRESS"},
     }
-    completed = {
-        "purchase_id": "purchase-complete",
-        "telemetry": {"order_status_type": "DELIVERED"},
+    not_active = {
+        "purchase_id": "purchase-not-active",
+        "telemetry": {"order_status_type": status_type},
+        "call_to_action": {"type": "ORDER_TRACKING"},
+        "status": {"value": "Preparing"},
     }
-    session = FakeSession(FakeResponse(200, {"orders": [active, completed]}))
+    session = FakeSession(FakeResponse(200, {"orders": [active, not_active]}))
 
     assert await make_api(session).fetch_active_orders() == [active]
+
+
+async def test_active_orders_keeps_legacy_tracking_fallback_without_telemetry() -> None:
+    """Keep compatibility with older order items that omit telemetry entirely."""
+    legacy_active = {
+        "order_id": "legacy-order-active",
+        "call_to_action": {"type": "ORDER_TRACKING"},
+    }
+    session = FakeSession(FakeResponse(200, {"orders": [legacy_active]}))
+
+    assert await make_api(session).fetch_active_orders() == [legacy_active]
 
 
 @pytest.mark.parametrize(

@@ -9,8 +9,6 @@ CONF_VENUE_IDS = "venue_ids"
 
 DEFAULT_NAME = "Wolt Order"
 
-UPDATE_INTERVAL = 60  # seconds
-
 REFRESH_URL = "https://authentication.wolt.com/v1/wauth2/access_token"
 # Updated endpoints based on the current Wolt web client
 ACTIVE_ORDERS_URL = "https://consumer-api.wolt.com/order-xp/web/v1/pages/orders"
