@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Assistant reauthentication support.
 - Privacy-preserving diagnostics that expose operational counts without order,
   courier, venue, account-name, or credential values.
+- Typed per-purchase status and ETA entities with English and Hebrew UI translations.
 
 ### Changed
 
@@ -34,6 +35,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   an order is active; venue polling uses a conservative five-minute interval.
 - Credential inputs are password-masked, and options no longer prefill saved
   access or refresh tokens.
+- Order status entities use stable normalized enum values, config-entry-scoped
+  unique IDs, and a shared per-purchase device.
 
 ### Fixed
 
@@ -50,11 +53,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   through to legacy heuristics and create false active-order entities.
 - Loaded-entry reauthentication now schedules exactly one reload instead of
   duplicating the immediate post-credential-update polling cycle.
+- Existing order status entities migrate to the scoped identity without losing
+  entity-registry customizations.
 
 ### Security
 
 - Rotated credentials are persisted without being logged.
 - Documentation and tests explicitly prohibit real Wolt or Home Assistant secrets.
 - Venue-update warnings no longer include configured venue slugs.
+- Order entities no longer expose item lists, payment values, addresses, or raw
+  tracking payloads as state attributes.
 
 [Unreleased]: https://github.com/selfish/ha-wait-for-wolt/compare/main...HEAD
