@@ -46,6 +46,27 @@ async def test_user_flow_parses_venue_lines(hass: HomeAssistant) -> None:
     ]
 
 
+async def test_user_flow_allows_missing_analytics_session(
+    hass: HomeAssistant,
+) -> None:
+    """Create an entry when Wolt does not expose the analytics session cookie."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_USER},
+    )
+    user_input = {**ENTRY_DATA}
+    user_input.pop(CONF_SESSION_ID)
+    user_input[CONF_VENUE_IDS] = "sanitized-venue"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input,
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_SESSION_ID] == ""
+
+
 async def test_options_update_credentials_venues_and_reload(
     hass: HomeAssistant,
 ) -> None:
@@ -67,10 +88,9 @@ async def test_options_update_credentials_venues_and_reload(
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.data == ENTRY_DATA
-    assert entry.options[CONF_SESSION_ID] == "sanitized-session-id-next"
-    assert entry.options[CONF_BEARER_TOKEN] == "sanitized-access-token-next"
-    assert entry.options[CONF_REFRESH_TOKEN] == "sanitized-refresh-token-next"
+    assert entry.data[CONF_SESSION_ID] == "sanitized-session-id-next"
+    assert entry.data[CONF_BEARER_TOKEN] == "sanitized-access-token-next"
+    assert entry.data[CONF_REFRESH_TOKEN] == "sanitized-refresh-token-next"
     assert entry.options[CONF_VENUE_IDS] == [
         "sanitized-venue",
         "second-sanitized-venue",

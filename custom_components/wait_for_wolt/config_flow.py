@@ -22,7 +22,7 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     DATA_SCHEMA = vol.Schema(
         {
-            vol.Required(CONF_SESSION_ID): str,
+            vol.Optional(CONF_SESSION_ID, default=""): str,
             vol.Required(CONF_BEARER_TOKEN): str,
             vol.Required(CONF_REFRESH_TOKEN): str,
             vol.Optional(CONF_VENUE_IDS, default=""): TextSelector({"multiline": True}),
@@ -33,6 +33,7 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         if user_input is not None:
+            user_input[CONF_SESSION_ID] = user_input.get(CONF_SESSION_ID, "")
             venue_ids = [
                 v.strip()
                 for v in user_input.get(CONF_VENUE_IDS, "").split("\n")
@@ -61,14 +62,18 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 if v.strip()
             ]
 
-            return self.async_create_entry(
-                title="",
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
                 data={
-                    CONF_SESSION_ID: user_input[CONF_SESSION_ID],
+                    **self.config_entry.data,
+                    CONF_SESSION_ID: user_input.get(CONF_SESSION_ID, ""),
                     CONF_BEARER_TOKEN: user_input[CONF_BEARER_TOKEN],
                     CONF_REFRESH_TOKEN: user_input[CONF_REFRESH_TOKEN],
-                    CONF_VENUE_IDS: venue_ids,
                 },
+            )
+            return self.async_create_entry(
+                title="",
+                data={CONF_VENUE_IDS: venue_ids},
             )
 
         current = "\n".join(
@@ -78,26 +83,17 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
         )
         schema = vol.Schema(
             {
-                vol.Required(
+                vol.Optional(
                     CONF_SESSION_ID,
-                    default=self.config_entry.options.get(
-                        CONF_SESSION_ID,
-                        self.config_entry.data.get(CONF_SESSION_ID, ""),
-                    ),
+                    default=self.config_entry.data.get(CONF_SESSION_ID, ""),
                 ): str,
                 vol.Required(
                     CONF_BEARER_TOKEN,
-                    default=self.config_entry.options.get(
-                        CONF_BEARER_TOKEN,
-                        self.config_entry.data.get(CONF_BEARER_TOKEN, ""),
-                    ),
+                    default=self.config_entry.data.get(CONF_BEARER_TOKEN, ""),
                 ): str,
                 vol.Required(
                     CONF_REFRESH_TOKEN,
-                    default=self.config_entry.options.get(
-                        CONF_REFRESH_TOKEN,
-                        self.config_entry.data.get(CONF_REFRESH_TOKEN, ""),
-                    ),
+                    default=self.config_entry.data.get(CONF_REFRESH_TOKEN, ""),
                 ): str,
                 vol.Optional(CONF_VENUE_IDS, default=current): TextSelector(
                     {"multiline": True}

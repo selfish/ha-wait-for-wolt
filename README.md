@@ -12,22 +12,32 @@ capture them is from your web browser after logging in.
 
 1. Log in to [wolt.com](https://wolt.com) and open the developer tools
    (usually <kbd>F12</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>).
-2. Under the **Application** (or **Storage**) tab locate the **Local
-   Storage** entry for `https://wolt.com`.
+2. Under the **Application** (or **Storage**) tab, open the cookies for
+   `https://wolt.com`.
 3. In the **Console** paste the snippet below to print the needed values
    without digging through the storage menus:
 
    ```js
    (() => {
      const getCookie = (name) => document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1];
-     console.log('SESSION_ID:', getCookie('__woltUid'));
-     console.log('REFRESH_TOKEN:', JSON.parse(decodeURIComponent(document.cookie.match(/__wrtoken=([^;]+)/)?.[1] || '')));
-     console.log('ACCESS_TOKEN:', JSON.parse(decodeURIComponent(getCookie('__wtoken') || '{}')).accessToken);
+     const decode = (name) => {
+       const raw = getCookie(name);
+       if (!raw) return undefined;
+       try { return JSON.parse(decodeURIComponent(raw)); }
+       catch { return decodeURIComponent(raw); }
+     };
+     const access = decode('__wtoken');
+     const refresh = decode('__wrtoken');
+     console.log('SESSION_ID (optional):', getCookie('__woltUid'));
+     console.log('ACCESS_TOKEN:', access?.accessToken ?? access?.access_token ?? access);
+     console.log('REFRESH_TOKEN:', refresh?.refreshToken ?? refresh?.refresh_token ?? refresh);
    })();
    ```
 
-   Copy the printed values for use below. If the keys are not present you can
-   also inspect the network request headers to find them.
+   Copy the access and refresh tokens for use below. `SESSION_ID` is optional:
+   accounts without analytics consent may not have `__woltUid`, and authenticated
+   order requests work without that header. If a token is not printed, inspect an
+   authenticated Wolt network request instead.
 4. Use these tokens in the configuration below. They will be refreshed
    automatically when required.
 
@@ -40,6 +50,7 @@ To configure with YAML, add a sensor entry to `configuration.yaml`:
 sensor:
   - platform: wait_for_wolt
     name: My Wolt Account
+    # Optional; omit if Wolt does not expose __woltUid.
     session_id: YOUR_SESSION_ID
     bearer_token: YOUR_ACCESS_TOKEN
     refresh_token: YOUR_REFRESH_TOKEN
@@ -61,7 +72,9 @@ ID on a new line.
 - If you configure `venue_ids`, sensors for each venue report whether it is open and expose delivery price and estimates when available.
 
 ## Limitations
-- The integration relies on tokens taken from the Wolt web site. If they become invalid you will need to capture new ones.
+- This is an unofficial integration and is not affiliated with or endorsed by Wolt.
+- It relies on Wolt's private consumer web API, which can change without notice.
+- If both the access and refresh tokens become invalid, you will need to capture new ones.
 - Treat every cookie and token as a password. Never post them in an issue, log, screenshot, or test fixture.
 
 ## Development

@@ -38,7 +38,7 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORM_SCHEMA = cv.PLATFORM_SCHEMA.extend(
     {
-        vol.Required(CONF_SESSION_ID): cv.string,
+        vol.Optional(CONF_SESSION_ID, default=""): cv.string,
         vol.Required(CONF_BEARER_TOKEN): cv.string,
         vol.Required(CONF_REFRESH_TOKEN): cv.string,
         vol.Optional(CONF_VENUE_IDS, default=[]): vol.All(cv.ensure_list, [cv.string]),
@@ -55,10 +55,11 @@ async def _setup_sensors(
     token: str,
     refresh: str,
     venues: list[str] | None = None,
+    entry: ConfigEntry | None = None,
 ) -> Callable[[], None]:
     """Create sensors and schedule updates."""
     session = async_get_clientsession(hass)
-    api = WoltApi(session, session_id, token, refresh)
+    api = WoltApi(session, session_id, token, refresh, hass=hass, entry=entry)
 
     sensors: list[WoltOrderSensor] = []
     venue_sensors: list[WoltVenueSensor] = []
@@ -73,7 +74,7 @@ async def _setup_sensors(
         known = {sensor.order_id for sensor in sensors}
         new_entities = []
         for order in orders:
-            order_id = order.get("order_id")
+            order_id = order.get("purchase_id") or order.get("order_id")
             if not order_id or order_id in known:
                 continue
             sensor = WoltOrderSensor(api, order_id, f"{name} {order_id}")
@@ -95,25 +96,32 @@ class WoltApi:
     """Simple wrapper for the Wolt API."""
 
     def __init__(
-        self, session: aiohttp.ClientSession, session_id: str, token: str, refresh: str
+        self,
+        session: aiohttp.ClientSession,
+        session_id: str,
+        token: str,
+        refresh: str,
+        *,
+        hass: HomeAssistant | None = None,
+        entry: ConfigEntry | None = None,
     ) -> None:
         self._session = session
         self._session_id = session_id
         self._token = token
         self._refresh = refresh
+        self._hass = hass
+        self._entry = entry
 
     async def _refresh_token(self) -> bool:
-        """Refresh the bearer token using the refresh token."""
+        """Refresh and persist the bearer token using Wolt's current web flow."""
         payload = {
-            "grantType": "refresh_token",
-            "audience": "converse_widget",
-            "refreshToken": self._refresh,
-            "appId": "wolt-consumer",
+            "grant_type": "refresh_token",
+            "refresh_token": self._refresh,
         }
         try:
             async with asyncio.timeout(10):
                 async with self._session.post(
-                    REFRESH_URL, json=payload, headers=HEADERS
+                    REFRESH_URL, data=payload, headers=HEADERS
                 ) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
@@ -121,32 +129,52 @@ class WoltApi:
             _LOGGER.error("Token refresh failed: %s", err)
             return False
 
-        if not isinstance(data, dict) or not isinstance(
-            access_token := data.get("accessToken"), str
-        ):
+        access_token = (
+            data.get("access_token") or data.get("accessToken")
+            if isinstance(data, dict)
+            else None
+        )
+        if not isinstance(access_token, str):
             _LOGGER.error("Token refresh returned an invalid response")
             return False
 
         self._token = access_token
-        if isinstance(refresh_token := data.get("refreshToken"), str):
+        refresh_token = data.get("refresh_token") or data.get("refreshToken")
+        if isinstance(refresh_token, str):
             self._refresh = refresh_token
+        if self._entry is not None and self._hass is not None:
+            self._hass.config_entries.async_update_entry(
+                self._entry,
+                data={
+                    **self._entry.data,
+                    CONF_BEARER_TOKEN: self._token,
+                    CONF_REFRESH_TOKEN: self._refresh,
+                },
+            )
         return True
 
     async def _request(self, method: str, url: str, auth: bool = True) -> Any:
-        """Make a request and return the parsed JSON response."""
+        """Make a request, refreshing and retrying once only after a 401."""
         headers = {**HEADERS}
         if auth:
-            if not await self._refresh_token():
-                return None
-            headers.update(
-                {
-                    "w-wolt-session-id": self._session_id,
-                    "authorization": f"Bearer {self._token}",
-                }
-            )
+            headers["authorization"] = f"Bearer {self._token}"
+            if self._session_id:
+                headers["w-wolt-session-id"] = self._session_id
         try:
             async with asyncio.timeout(10):
                 async with self._session.request(method, url, headers=headers) as resp:
+                    if auth and resp.status == 401:
+                        if not await self._refresh_token():
+                            return None
+                        retry_headers = {
+                            **headers,
+                            "authorization": f"Bearer {self._token}",
+                        }
+                        async with self._session.request(
+                            method, url, headers=retry_headers
+                        ) as retry_resp:
+                            retry_resp.raise_for_status()
+                            return await retry_resp.json()
                     resp.raise_for_status()
                     return await resp.json()
         except (TimeoutError, aiohttp.ClientError, aiohttp.ContentTypeError) as err:
@@ -194,7 +222,7 @@ async def async_setup_platform(
 ) -> None:
     """Set up Wolt sensors from YAML."""
     name = config[CONF_NAME]
-    session_id = config[CONF_SESSION_ID]
+    session_id = config.get(CONF_SESSION_ID, "")
     token = config[CONF_BEARER_TOKEN]
     refresh = config[CONF_REFRESH_TOKEN]
 
@@ -220,6 +248,7 @@ async def async_setup_entry(
         data[CONF_BEARER_TOKEN],
         data[CONF_REFRESH_TOKEN],
         venues,
+        entry,
     )
     entry.async_on_unload(cancel_interval)
 

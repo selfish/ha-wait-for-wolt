@@ -54,6 +54,13 @@ async def test_config_entry_setup_and_unload_cancel_polling(
         ) as reload_entry:
             hass.config_entries.async_update_entry(
                 entry,
+                data={**entry.data, CONF_BEARER_TOKEN: "rotated-access-token"},
+            )
+            await hass.async_block_till_done()
+            reload_entry.assert_not_awaited()
+
+            hass.config_entries.async_update_entry(
+                entry,
                 options={CONF_VENUE_IDS: ["second-sanitized-venue"]},
             )
             await hass.async_block_till_done()

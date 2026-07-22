@@ -1,4 +1,6 @@
 {
-  "accessToken": "sanitized-access-token-next",
-  "refreshToken": "sanitized-refresh-token-next"
+  "access_token": "sanitized-access-token-next",
+  "refresh_token": "sanitized-refresh-token-next",
+  "expires_in": 1800,
+  "token_type": "Bearer"
 }

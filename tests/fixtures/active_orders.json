@@ -1,7 +1,19 @@
 {
   "orders": [
     {
-      "order_id": "sanitized-order-001"
+      "purchase_id": "sanitized-purchase-001",
+      "status": {
+        "value": "In progress"
+      },
+      "telemetry": {
+        "order_status_type": "IN_PROGRESS"
+      },
+      "call_to_action": {
+        "link": "ORDER_TRACKING"
+      },
+      "venue": {
+        "name": "Sanitized Test Venue"
+      }
     }
   ]
 }

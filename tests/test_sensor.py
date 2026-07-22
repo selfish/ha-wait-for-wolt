@@ -29,7 +29,7 @@ async def test_initial_active_order_is_added_once() -> None:
         patch("custom_components.wait_for_wolt.sensor.async_get_clientsession"),
         patch(
             "custom_components.wait_for_wolt.sensor.WoltApi.fetch_active_orders",
-            AsyncMock(return_value=[{"order_id": "sanitized-order-001"}]),
+            AsyncMock(return_value=[{"purchase_id": "sanitized-purchase-001"}]),
         ),
         patch(
             "custom_components.wait_for_wolt.sensor.async_track_time_interval",
@@ -48,7 +48,7 @@ async def test_initial_active_order_is_added_once() -> None:
     assert returned_cancel is cancel_interval
     assert add_entities.call_count == 1
     entities = add_entities.call_args.args[0]
-    assert [entity.order_id for entity in entities] == ["sanitized-order-001"]
+    assert [entity.order_id for entity in entities] == ["sanitized-purchase-001"]
     assert add_entities.call_args.kwargs == {"update_before_add": True}
 
 
@@ -69,9 +69,9 @@ async def test_polling_discovers_only_new_orders_after_empty_response() -> None:
             AsyncMock(
                 side_effect=[
                     [],
-                    [{"order_id": "sanitized-order-001"}],
+                    [{"purchase_id": "sanitized-purchase-001"}],
                     [],
-                    [{"order_id": "sanitized-order-001"}],
+                    [{"purchase_id": "sanitized-purchase-001"}],
                 ]
             ),
         ),
@@ -95,7 +95,7 @@ async def test_polling_discovers_only_new_orders_after_empty_response() -> None:
 
     assert add_entities.call_count == 1
     entities = add_entities.call_args.args[0]
-    assert [entity.order_id for entity in entities] == ["sanitized-order-001"]
+    assert [entity.order_id for entity in entities] == ["sanitized-purchase-001"]
 
 
 async def test_order_sensor_state_attributes_and_availability() -> None:
