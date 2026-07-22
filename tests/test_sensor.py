@@ -9,6 +9,7 @@ import pytest
 from homeassistant.config_entries import SOURCE_IMPORT
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.wait_for_wolt.api import WoltApi, WoltConnectionError
 from custom_components.wait_for_wolt.const import (
@@ -18,10 +19,15 @@ from custom_components.wait_for_wolt.const import (
     CONF_VENUE_IDS,
     DOMAIN,
 )
+from custom_components.wait_for_wolt.coordinator import (
+    WoltCoordinatorData,
+    WoltDataUpdateCoordinator,
+    WoltRuntimeData,
+)
 from custom_components.wait_for_wolt.sensor import (
     WoltOrderSensor,
     WoltVenueSensor,
-    _setup_sensors,
+    async_setup_entry,
     async_setup_platform,
 )
 
@@ -29,6 +35,15 @@ from custom_components.wait_for_wolt.sensor import (
 def load_json_fixture(name: str) -> Any:
     """Load a sanitized fixture."""
     return json.loads((Path(__file__).parent / "fixtures" / name).read_text())
+
+
+def mock_coordinator(data: WoltCoordinatorData) -> Mock:
+    """Create the coordinator surface consumed by entities and setup."""
+    coordinator = Mock(spec=WoltDataUpdateCoordinator)
+    coordinator.data = data
+    coordinator.last_update_success = True
+    coordinator.async_add_listener.return_value = Mock()
+    return coordinator
 
 
 async def test_legacy_yaml_platform_starts_config_entry_import(
@@ -57,142 +72,75 @@ async def test_legacy_yaml_platform_starts_config_entry_import(
     )
 
 
-async def test_initial_active_order_is_added_once() -> None:
-    """Avoid submitting the same initial order entity twice to Home Assistant."""
-    add_entities = Mock()
-    cancel_interval = Mock()
-
-    with (
-        patch("custom_components.wait_for_wolt.sensor.async_get_clientsession"),
-        patch(
-            "custom_components.wait_for_wolt.sensor.WoltApi.fetch_active_orders",
-            AsyncMock(return_value=[{"purchase_id": "sanitized-purchase-001"}]),
-        ),
-        patch(
-            "custom_components.wait_for_wolt.sensor.async_track_time_interval",
-            return_value=cancel_interval,
-        ),
-    ):
-        returned_cancel = await _setup_sensors(
-            Mock(),
-            add_entities,
-            "Sanitized Wolt",
-            "sanitized-session-id",
-            "sanitized-access-token",
-            "sanitized-refresh-token",
+async def test_initial_active_order_is_added_once(hass: HomeAssistant) -> None:
+    """Add the first coordinator order once and register dynamic discovery."""
+    order_id = "sanitized-purchase-001"
+    coordinator = mock_coordinator(
+        WoltCoordinatorData(
+            orders={order_id: {"purchase_id": order_id}},
+            active_order_ids=frozenset({order_id}),
+            details={order_id: {"status": "delivery"}},
         )
-
-    assert returned_cancel is cancel_interval
-    assert add_entities.call_count == 1
-    entities = add_entities.call_args.args[0]
-    assert [entity.order_id for entity in entities] == ["sanitized-purchase-001"]
-    assert add_entities.call_args.kwargs == {"update_before_add": True}
-
-
-async def test_polling_discovers_only_new_orders_after_empty_response() -> None:
-    """Discover a later order once and tolerate subsequent empty responses."""
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_NAME: "Sanitized Wolt", CONF_VENUE_IDS: []},
+    )
+    entry.runtime_data = WoltRuntimeData(Mock(spec=WoltApi), coordinator)
+    entry.add_to_hass(hass)
     add_entities = Mock()
-    scheduled_update = None
 
-    def capture_interval(_hass: Any, update: Any, _interval: Any) -> Mock:
-        nonlocal scheduled_update
-        scheduled_update = update
-        return Mock()
-
-    with (
-        patch("custom_components.wait_for_wolt.sensor.async_get_clientsession"),
-        patch(
-            "custom_components.wait_for_wolt.sensor.WoltApi.fetch_active_orders",
-            AsyncMock(
-                side_effect=[
-                    [],
-                    [{"purchase_id": "sanitized-purchase-001"}],
-                    [],
-                    [{"purchase_id": "sanitized-purchase-001"}],
-                ]
-            ),
-        ),
-        patch(
-            "custom_components.wait_for_wolt.sensor.async_track_time_interval",
-            side_effect=capture_interval,
-        ),
-    ):
-        await _setup_sensors(
-            Mock(),
-            add_entities,
-            "Sanitized Wolt",
-            "sanitized-session-id",
-            "sanitized-access-token",
-            "sanitized-refresh-token",
-        )
-        assert scheduled_update is not None
-        await scheduled_update()
-        await scheduled_update()
-        await scheduled_update()
+    await async_setup_entry(hass, entry, add_entities)
+    listener = coordinator.async_add_listener.call_args.args[0]
+    listener()
 
     assert add_entities.call_count == 1
     entities = add_entities.call_args.args[0]
-    assert [entity.order_id for entity in entities] == ["sanitized-purchase-001"]
+    assert [entity.order_id for entity in entities] == [order_id]
+    assert add_entities.call_args.kwargs == {}
 
 
-async def test_config_entry_persists_rotated_tokens_via_api_callback() -> None:
-    """Keep Home Assistant persistence outside the extracted API layer."""
-    hass = Mock()
-    entry = Mock(
-        data={
-            "session_id": "test-session",
-            "bearer_token": "old-access-token",
-            "refresh_token": "old-refresh-token",
-            "preserved": True,
-        }
+async def test_coordinator_listener_discovers_only_new_orders(
+    hass: HomeAssistant,
+) -> None:
+    """Add an order discovered by a later shared refresh exactly once."""
+    coordinator = mock_coordinator(WoltCoordinatorData({}, frozenset(), {}))
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_NAME: "Sanitized Wolt"})
+    entry.runtime_data = WoltRuntimeData(Mock(spec=WoltApi), coordinator)
+    entry.add_to_hass(hass)
+    add_entities = Mock()
+
+    await async_setup_entry(hass, entry, add_entities)
+    listener = coordinator.async_add_listener.call_args.args[0]
+    order_id = "sanitized-purchase-001"
+    coordinator.data = WoltCoordinatorData(
+        orders={order_id: {"purchase_id": order_id}},
+        active_order_ids=frozenset({order_id}),
+        details={order_id: {"status": "delivery"}},
     )
-    api = Mock(spec=WoltApi)
-    api.fetch_active_orders = AsyncMock(return_value=[])
+    listener()
+    listener()
 
-    with (
-        patch("custom_components.wait_for_wolt.sensor.async_get_clientsession"),
-        patch(
-            "custom_components.wait_for_wolt.sensor.WoltApi", return_value=api
-        ) as api_cls,
-        patch("custom_components.wait_for_wolt.sensor.async_track_time_interval"),
-    ):
-        await _setup_sensors(
-            hass,
-            Mock(),
-            "Wolt",
-            "test-session",
-            "old-access-token",
-            "old-refresh-token",
-            entry=entry,
-        )
-
-    callback = api_cls.call_args.kwargs["token_update_callback"]
-    callback("new-access-token", "new-refresh-token")
-
-    hass.config_entries.async_update_entry.assert_called_once_with(
-        entry,
-        data={
-            "session_id": "test-session",
-            "bearer_token": "new-access-token",
-            "refresh_token": "new-refresh-token",
-            "preserved": True,
-        },
-    )
+    assert add_entities.call_count == 1
+    assert [entity.order_id for entity in add_entities.call_args.args[0]] == [order_id]
 
 
 async def test_order_sensor_state_attributes_and_availability() -> None:
-    """Expose a sanitized order response and become unavailable on API failure."""
-    api = AsyncMock(spec=WoltApi)
-    api.fetch_order_details.return_value = load_json_fixture("order_details.json")[
-        "order_details"
-    ][0]
+    """Expose one sanitized order from the coordinator's coherent snapshot."""
+    order_id = "sanitized-order-001"
+    details = load_json_fixture("order_details.json")["order_details"][0]
+    coordinator = mock_coordinator(
+        WoltCoordinatorData(
+            orders={order_id: {"purchase_id": order_id}},
+            active_order_ids=frozenset({order_id}),
+            details={order_id: details},
+        )
+    )
     sensor = WoltOrderSensor(
-        api,
-        "sanitized-order-001",
+        coordinator,
+        order_id,
         "Wolt sanitized-order-001",
     )
-
-    await sensor.async_update()
 
     assert sensor.unique_id == "wolt_sanitized-order-001"
     assert sensor.native_value == "delivery"
@@ -205,25 +153,46 @@ async def test_order_sensor_state_attributes_and_availability() -> None:
         "items": ["Sanitized item"],
     }
 
-    api.fetch_order_details.side_effect = WoltConnectionError("offline")
-    await sensor.async_update()
-
+    coordinator.last_update_success = False
     assert not sensor.available
 
 
 async def test_order_sensor_normalizes_current_status_object() -> None:
     """Expose the current purchase-tracking status object as a scalar state."""
-    api = AsyncMock(spec=WoltApi)
-    api.fetch_order_details.return_value = {
-        "status": {"value": "In progress"},
-        "venue_name": "Sanitized Test Venue",
-    }
-    sensor = WoltOrderSensor(api, "sanitized-order-001", "Wolt order")
-
-    await sensor.async_update()
+    order_id = "sanitized-order-001"
+    coordinator = mock_coordinator(
+        WoltCoordinatorData(
+            orders={order_id: {"purchase_id": order_id}},
+            active_order_ids=frozenset({order_id}),
+            details={order_id: {"status": {"value": "In progress"}}},
+        )
+    )
+    sensor = WoltOrderSensor(coordinator, order_id, "Wolt order")
 
     assert sensor.available
     assert sensor.native_value == "In progress"
+
+
+async def test_order_sensor_keeps_final_status_from_order_summary() -> None:
+    """Expose a delivered transition after rich active tracking stops."""
+    order_id = "sanitized-order-001"
+    coordinator = mock_coordinator(
+        WoltCoordinatorData(
+            orders={
+                order_id: {
+                    "purchase_id": order_id,
+                    "status": {"value": "Delivered"},
+                    "telemetry": {"order_status_type": "DELIVERED"},
+                }
+            },
+            active_order_ids=frozenset(),
+            details={},
+        )
+    )
+    sensor = WoltOrderSensor(coordinator, order_id, "Wolt order")
+
+    assert sensor.available
+    assert sensor.native_value == "Delivered"
 
 
 @pytest.mark.parametrize(
@@ -249,3 +218,20 @@ async def test_venue_sensor_state_and_availability(
     await sensor.async_update()
 
     assert not sensor.available
+
+
+async def test_venue_sensor_respects_explicit_closed_status() -> None:
+    """Prefer an explicit closed status over broader online metadata."""
+    api = AsyncMock(spec=WoltApi)
+    api.fetch_venue_details.return_value = {
+        "venue": {
+            "online": True,
+            "delivery_open_status": {"is_open": False},
+        }
+    }
+    sensor = WoltVenueSensor(api, "sanitized-venue", "Wolt sanitized-venue")
+
+    await sensor.async_update()
+
+    assert sensor.available
+    assert sensor.native_value == "closed"

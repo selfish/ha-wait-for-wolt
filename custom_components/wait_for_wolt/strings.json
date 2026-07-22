@@ -1,7 +1,8 @@
 {
   "config": {
     "abort": {
-      "already_configured": "A Wolt account is already configured. Remove the legacy YAML block after it has been imported."
+      "already_configured": "A Wolt account is already configured. Remove the legacy YAML block after it has been imported.",
+      "reauth_successful": "Wolt credentials were updated successfully."
     },
     "step": {
       "user": {
@@ -16,12 +17,21 @@
       },
       "init": {
         "title": "Update Wolt settings",
-        "description": "Update tokens or venue IDs. The analytics session ID is optional. Venue IDs are slugs from the venue URL; separate multiple IDs by new lines.",
+        "description": "Update tokens or venue IDs. Leave access and refresh tokens blank to keep their current values. The analytics session ID is optional; leaving it blank clears it. Venue IDs are slugs from the venue URL; separate multiple IDs by new lines.",
         "data": {
           "session_id": "Session ID (optional)",
           "bearer_token": "Access Token",
           "refresh_token": "Refresh Token",
           "venue_ids": "Venue IDs"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect Wolt",
+        "description": "Wolt rejected the saved credentials. Enter a current access token and refresh token from wolt.com. The analytics session ID is optional; leave it blank to keep the saved value.",
+        "data": {
+          "session_id": "Session ID (optional)",
+          "bearer_token": "Access Token",
+          "refresh_token": "Refresh Token"
         }
       }
     }

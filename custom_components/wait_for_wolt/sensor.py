@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -12,11 +11,10 @@ import voluptuous as vol
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import CONF_NAME
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import WoltApi, WoltApiError
 from .const import (
@@ -26,10 +24,12 @@ from .const import (
     CONF_VENUE_IDS,
     DEFAULT_NAME,
     DOMAIN,
-    UPDATE_INTERVAL,
 )
+from .coordinator import WoltDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+SCAN_INTERVAL = timedelta(minutes=5)
 
 PLATFORM_SCHEMA = cv.PLATFORM_SCHEMA.extend(
     {
@@ -40,79 +40,6 @@ PLATFORM_SCHEMA = cv.PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
     }
 )
-
-
-async def _setup_sensors(
-    hass: HomeAssistant,
-    async_add_entities: AddEntitiesCallback,
-    name: str,
-    session_id: str,
-    token: str,
-    refresh: str,
-    venues: list[str] | None = None,
-    entry: ConfigEntry | None = None,
-) -> Callable[[], None]:
-    """Create sensors and schedule updates."""
-    session = async_get_clientsession(hass)
-
-    def _persist_tokens(access_token: str, refresh_token: str) -> None:
-        if entry is None:
-            return
-        updated_data = {
-            **entry.data,
-            CONF_BEARER_TOKEN: access_token,
-            CONF_REFRESH_TOKEN: refresh_token,
-        }
-        runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-        if isinstance(runtime, dict):
-            runtime["data"] = dict(updated_data)
-            runtime["options"] = dict(entry.options)
-        hass.config_entries.async_update_entry(
-            entry,
-            data=updated_data,
-        )
-
-    api = WoltApi(
-        session,
-        session_id,
-        token,
-        refresh,
-        token_update_callback=_persist_tokens if entry is not None else None,
-    )
-
-    sensors: list[WoltOrderSensor] = []
-    venue_sensors: list[WoltVenueSensor] = []
-
-    if venues:
-        for slug in venues:
-            venue_sensors.append(WoltVenueSensor(api, slug, f"{name} {slug}"))
-        async_add_entities(venue_sensors, update_before_add=True)
-
-    async def _update_orders(now=None, *, update_before_add: bool = False) -> None:
-        try:
-            orders = await api.fetch_active_orders()
-        except WoltApiError as err:
-            _LOGGER.warning("Unable to fetch active Wolt orders: %s", err)
-            return
-        known = {sensor.order_id for sensor in sensors}
-        new_entities = []
-        for order in orders:
-            order_id = order.get("purchase_id") or order.get("order_id")
-            if not order_id or order_id in known:
-                continue
-            sensor = WoltOrderSensor(api, order_id, f"{name} {order_id}")
-            sensors.append(sensor)
-            new_entities.append(sensor)
-        if new_entities:
-            async_add_entities(new_entities, update_before_add=update_before_add)
-
-    await _update_orders(update_before_add=True)
-    if not sensors:
-        _LOGGER.info("No active orders found")
-
-    return async_track_time_interval(
-        hass, _update_orders, timedelta(seconds=UPDATE_INTERVAL)
-    )
 
 
 async def async_setup_platform(
@@ -145,69 +72,99 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Wolt sensors from a config entry."""
+    """Set up coordinator-backed order sensors and public venue sensors."""
     data = {**entry.data, **entry.options}
+    runtime = entry.runtime_data
+    coordinator = runtime.coordinator
+    api = runtime.api
+    name = data.get(CONF_NAME, DEFAULT_NAME)
     venues = data.get(CONF_VENUE_IDS, [])
-    cancel_interval = await _setup_sensors(
-        hass,
-        async_add_entities,
-        data.get(CONF_NAME, DEFAULT_NAME),
-        data.get(CONF_SESSION_ID, ""),
-        data[CONF_BEARER_TOKEN],
-        data[CONF_REFRESH_TOKEN],
-        venues,
-        entry,
-    )
-    entry.async_on_unload(cancel_interval)
+    if venues:
+        async_add_entities(
+            [WoltVenueSensor(api, slug, f"{name} {slug}") for slug in venues],
+            update_before_add=True,
+        )
+
+    known_order_ids: set[str] = set()
+
+    @callback
+    def async_add_new_orders() -> None:
+        new_order_ids = coordinator.data.active_order_ids - known_order_ids
+        if not new_order_ids:
+            return
+        known_order_ids.update(new_order_ids)
+        async_add_entities(
+            [
+                WoltOrderSensor(coordinator, order_id, f"{name} {order_id}")
+                for order_id in sorted(new_order_ids)
+            ]
+        )
+
+    async_add_new_orders()
+    entry.async_on_unload(coordinator.async_add_listener(async_add_new_orders))
 
 
-class WoltOrderSensor(SensorEntity):
+class WoltOrderSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEntity):
     """Representation of a Wolt order sensor."""
 
     _attr_attribution = "Data provided by Wolt"
 
-    def __init__(self, api: WoltApi, order_id: str, name: str) -> None:
-        self.api = api
+    _attr_icon = "mdi:package-variant"
+
+    def __init__(
+        self,
+        coordinator: WoltDataUpdateCoordinator,
+        order_id: str,
+        name: str,
+    ) -> None:
+        super().__init__(coordinator)
         self.order_id = order_id
         self._attr_name = name
         self._attr_unique_id = f"wolt_{order_id}"
-        self._attr_extra_state_attributes = {}
-        self._attr_available = False
-        self._state = None
+
+    @property
+    def available(self) -> bool:
+        """Remain available while the order exists in the shared snapshot."""
+        return super().available and self.order_id in self.coordinator.data.orders
+
+    @property
+    def _order_data(self) -> dict[str, Any]:
+        """Merge the order summary with richer active tracking details."""
+        return {
+            **self.coordinator.data.orders.get(self.order_id, {}),
+            **self.coordinator.data.details.get(self.order_id, {}),
+        }
 
     @property
     def native_value(self):
-        return self._state
-
-    async def async_update(self) -> None:
-        try:
-            details = await self.api.fetch_order_details(self.order_id)
-        except WoltApiError as err:
-            self._attr_available = False
-            _LOGGER.warning("Unable to update Wolt order %s: %s", self.order_id, err)
-            return
-        if not details:
-            self._attr_available = False
-            _LOGGER.warning("Order %s details not found", self.order_id)
-            return
-        self._attr_available = True
-        status = details.get("status")
+        """Return the normalized Wolt status as a scalar sensor state."""
+        order = self._order_data
+        status = order.get("status")
         if isinstance(status, dict):
             status = status.get("value") or status.get("text") or status.get("label")
         if status is None:
-            status = details.get("order_status_type")
-        self._state = str(status) if status is not None else None
-        items = details.get("items")
-        self._attr_extra_state_attributes = {
-            "delivery_eta": details.get("delivery_eta"),
-            "client_pre_estimate": details.get("client_pre_estimate"),
-            "venue_name": details.get("venue_name"),
-            "payment_amount": details.get("payment_amount"),
+            telemetry = order.get("telemetry")
+            status = (
+                telemetry.get("order_status_type")
+                if isinstance(telemetry, dict)
+                else order.get("order_status_type")
+            )
+        return str(status) if status is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return useful, non-credential order metadata from the shared snapshot."""
+        order = self._order_data
+        items = order.get("items")
+        return {
+            "delivery_eta": order.get("delivery_eta"),
+            "client_pre_estimate": order.get("client_pre_estimate"),
+            "venue_name": order.get("venue_name"),
+            "payment_amount": order.get("payment_amount"),
             "items": [item.get("name") for item in items if isinstance(item, dict)]
             if isinstance(items, list)
             else [],
         }
-        self._attr_icon = "mdi:package-variant"
 
 
 class WoltVenueSensor(SensorEntity):
@@ -245,9 +202,11 @@ class WoltVenueSensor(SensorEntity):
         self._attr_available = True
         open_info = venue.get("delivery_open_status") or venue.get("open_status") or {}
 
-        is_open = (
-            open_info.get("is_open") or venue.get("online") or venue.get("is_open")
-        )
+        is_open = open_info.get("is_open")
+        if is_open is None:
+            is_open = venue.get("online")
+        if is_open is None:
+            is_open = venue.get("is_open")
         self._state = "open" if is_open else "closed"
 
         # Extract estimates for available delivery methods

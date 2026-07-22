@@ -74,12 +74,21 @@ imported config entry becomes the authoritative credential store.
 ID. Enter one ID per line or list entry. When configuring from the UI, type each
 ID on a new line.
 
+The integration masks credential fields in setup, options, and reauthentication
+forms. In **Configure**, leave the access and refresh token fields blank to keep
+their saved values. If Wolt rejects both saved credentials, Home Assistant opens
+a reauthentication flow for replacement tokens.
+
 ## How it works
 - The integration refreshes the bearer token automatically.
-- Every minute it polls Wolt for your active orders.
+- One shared coordinator polls every 30 seconds while an order is active and every
+  five minutes while idle. Each authenticated endpoint is fetched at most once per
+  cycle, and optional rich tracking failures fall back to the order summary.
 - A sensor entity is created for each order that is in progress. The sensor state reflects the current order status and attributes include the delivery estimate, venue and items ordered.
 - New orders placed while Home Assistant is running are discovered automatically within the polling interval.
-- If you configure `venue_ids`, sensors for each venue report whether it is open and expose delivery price and estimates when available.
+- If you configure `venue_ids`, sensors poll the public venue endpoint every five
+  minutes, report whether it is open, and expose delivery price and estimates when
+  available.
 
 ## Limitations
 - This is an unofficial integration and is not affiliated with or endorsed by Wolt.
