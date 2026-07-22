@@ -160,10 +160,11 @@ async def test_order_entities_are_typed_scoped_and_privacy_safe() -> None:
     assert eta.native_value == datetime(2030, 1, 1, 12, 30, tzinfo=UTC)
     assert status.available
     assert eta.available
-    assert status.extra_state_attributes == {"venue_name": "Sanitized Test Venue"}
+    assert status.extra_state_attributes == {}
     assert "Sanitized item" not in json.dumps(status.extra_state_attributes)
     assert "0.00 TEST" not in json.dumps(status.extra_state_attributes)
     assert status.device_info == eta.device_info
+    assert order_id not in status.device_info["name"]
 
     coordinator.last_update_success = False
     assert not status.available
@@ -208,6 +209,49 @@ async def test_order_sensor_keeps_final_status_from_order_summary() -> None:
     assert sensor.native_value == "delivered"
 
 
+async def test_final_telemetry_overrides_stale_display_status() -> None:
+    """Never let stale display text hide an authoritative final state."""
+    order_id = "sanitized-order-001"
+    coordinator = mock_coordinator(
+        WoltCoordinatorData(
+            orders={
+                order_id: {
+                    "purchase_id": order_id,
+                    "status": {"value": "In progress"},
+                    "telemetry": {"order_status_type": "DELIVERED"},
+                }
+            },
+            active_order_ids=frozenset(),
+            details={},
+        )
+    )
+
+    sensor = WoltOrderStatusSensor(coordinator, "entry-001", order_id)
+
+    assert sensor.native_value == "delivered"
+
+
+async def test_in_progress_telemetry_rejects_stale_final_display_status() -> None:
+    """Keep an authoritative active order active despite stale final display text."""
+    order_id = "sanitized-order-001"
+    coordinator = mock_coordinator(
+        WoltCoordinatorData(
+            orders={order_id: {"purchase_id": order_id}},
+            active_order_ids=frozenset({order_id}),
+            details={
+                order_id: {
+                    "status": {"value": "Delivered"},
+                    "telemetry": {"order_status_type": "IN_PROGRESS"},
+                }
+            },
+        )
+    )
+
+    sensor = WoltOrderStatusSensor(coordinator, "entry-001", order_id)
+
+    assert sensor.native_value == "pending"
+
+
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
@@ -231,6 +275,10 @@ def test_order_status_normalization_is_stable(raw: str, expected: str) -> None:
     [
         ("2030-01-01T12:30:00Z", datetime(2030, 1, 1, 12, 30, tzinfo=UTC)),
         (1893501000000, datetime(2030, 1, 1, 12, 30, tzinfo=UTC)),
+        (35, None),
+        (0, None),
+        (-1, None),
+        ({"min": 25, "max": 35}, None),
         (True, None),
         ("25-35 min", None),
         (None, None),
@@ -270,6 +318,89 @@ async def test_legacy_order_unique_id_migrates_to_scoped_status_entity(
     assert migrated is not None
     assert migrated.unique_id == f"{entry.entry_id}_{order_id}_status"
     assert migrated.translation_key == "order_status"
+
+
+async def test_inactive_legacy_order_is_migrated_and_restored(
+    hass: HomeAssistant,
+) -> None:
+    """Restore an existing final order entity after an upgrade and restart."""
+    order_id = "sanitized-purchase-001"
+    coordinator = mock_coordinator(
+        WoltCoordinatorData(
+            orders={
+                order_id: {
+                    "purchase_id": order_id,
+                    "status": {"value": "In progress"},
+                    "telemetry": {"order_status_type": "DELIVERED"},
+                }
+            },
+            active_order_ids=frozenset(),
+            details={},
+        )
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_NAME: "Sanitized Wolt"})
+    entry.runtime_data = WoltRuntimeData(Mock(spec=WoltApi), coordinator)
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    legacy = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"wolt_{order_id}",
+        config_entry=entry,
+    )
+    add_entities = Mock()
+
+    await async_setup_entry(hass, entry, add_entities)
+
+    migrated = registry.async_get(legacy.entity_id)
+    assert migrated is not None
+    assert migrated.unique_id == f"{entry.entry_id}_{order_id}_status"
+    entities = add_entities.call_args.args[0]
+    assert len(entities) == 2
+    status = next(
+        entity for entity in entities if isinstance(entity, WoltOrderStatusSensor)
+    )
+    assert status.available
+    assert status.native_value == "delivered"
+
+
+async def test_inactive_scoped_order_is_restored_after_restart(
+    hass: HomeAssistant,
+) -> None:
+    """Recreate an existing scoped entity when its order is already final."""
+    order_id = "sanitized-purchase-001"
+    coordinator = mock_coordinator(
+        WoltCoordinatorData(
+            orders={
+                order_id: {
+                    "purchase_id": order_id,
+                    "telemetry": {"order_status_type": "DELIVERED"},
+                }
+            },
+            active_order_ids=frozenset(),
+            details={},
+        )
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_NAME: "Sanitized Wolt"})
+    entry.runtime_data = WoltRuntimeData(Mock(spec=WoltApi), coordinator)
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_{order_id}_status",
+        config_entry=entry,
+    )
+    add_entities = Mock()
+
+    await async_setup_entry(hass, entry, add_entities)
+
+    entities = add_entities.call_args.args[0]
+    assert len(entities) == 2
+    status = next(
+        entity for entity in entities if isinstance(entity, WoltOrderStatusSensor)
+    )
+    assert status.native_value == "delivered"
 
 
 async def test_legacy_entity_is_not_migrated_across_config_entries(

@@ -53,6 +53,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   through to legacy heuristics and create false active-order entities.
 - Present but incomplete or malformed telemetry is also treated as authoritative
   and cannot fall through to active-looking legacy hints.
+- Telemetry now remains authoritative over conflicting stale display text in status
+  entities, while `IN_PROGRESS` still permits non-final rich display details.
+- Duration-like or implausible numeric ETA values are rejected instead of becoming
+  bogus Unix-epoch timestamps.
+- Existing legacy or scoped order entities are restored after restart even when the
+  retained order has already reached a final state.
+- User-facing order device names and entity attributes no longer expose order IDs or
+  venue labels.
 - Loaded-entry reauthentication now schedules exactly one reload instead of
   duplicating the immediate post-credential-update polling cycle.
 - Existing order status entities migrate to the scoped identity without losing

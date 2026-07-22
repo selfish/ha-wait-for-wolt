@@ -86,8 +86,9 @@ a reauthentication flow for replacement tokens.
   cycle, and optional rich tracking failures fall back to the order summary.
 - Each in-progress purchase gets a device with a stable enum status sensor and a
   timestamp ETA sensor. Existing status entities are migrated to config-entry-scoped
-  unique IDs. Order item lists, payment values, addresses, and raw API payloads are
-  intentionally not exposed as entity attributes.
+  unique IDs. Order identifiers, venue labels, item lists, payment values, addresses,
+  and raw API payloads are intentionally not exposed in user-facing device names or
+  entity attributes.
 - New orders placed while Home Assistant is running are discovered automatically within the polling interval.
 - If you configure `venue_ids`, sensors poll the public venue endpoint every five
   minutes, report whether it is open, and expose delivery price and estimates when

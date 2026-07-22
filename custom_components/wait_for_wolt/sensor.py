@@ -39,7 +39,7 @@ _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(minutes=5)
 
-ORDER_STATUS_OPTIONS = (
+ORDER_STATUS_OPTIONS = [
     "pending",
     "preparing",
     "ready_for_pickup",
@@ -50,7 +50,7 @@ ORDER_STATUS_OPTIONS = (
     "cancelled",
     "failed",
     "unknown",
-)
+]
 
 ORDER_STATUS_DESCRIPTION = SensorEntityDescription(
     key="status",
@@ -67,17 +67,42 @@ ORDER_ETA_DESCRIPTION = SensorEntityDescription(
 
 
 def _raw_status(order: dict[str, Any]) -> str | None:
-    """Extract a scalar status from current and legacy Wolt payloads."""
+    """Extract a scalar status while respecting authoritative telemetry."""
+    status_type: Any = None
+    if "telemetry" in order:
+        telemetry = order["telemetry"]
+        status_type = (
+            telemetry.get("order_status_type") if isinstance(telemetry, dict) else None
+        )
+        if str(status_type).upper() != "IN_PROGRESS":
+            return str(status_type) if status_type is not None else None
+    elif "order_status_type" in order:
+        status_type = order["order_status_type"]
+        if str(status_type).upper() != "IN_PROGRESS":
+            return str(status_type) if status_type is not None else None
+
     status = order.get("status")
     if isinstance(status, dict):
         status = status.get("value") or status.get("text") or status.get("label")
     if status is None:
-        telemetry = order.get("telemetry")
-        status = (
-            telemetry.get("order_status_type")
-            if isinstance(telemetry, dict)
-            else order.get("order_status_type")
+        status = status_type
+    if str(status_type).upper() == "IN_PROGRESS" and status is not None:
+        display_status = re.sub(r"[^a-z0-9]+", "_", str(status).strip().lower()).strip(
+            "_"
         )
+        if any(
+            token in display_status
+            for token in (
+                "delivered",
+                "completed",
+                "finished",
+                "cancel",
+                "fail",
+                "reject",
+                "refund",
+            )
+        ):
+            return str(status_type)
     return str(status) if status is not None else None
 
 
@@ -125,6 +150,10 @@ def _parse_eta(value: Any) -> datetime | None:
         return None
     if isinstance(value, int | float):
         timestamp = value / 1000 if value > 10_000_000_000 else value
+        # Explicit ETAs must be plausible wall-clock timestamps. Small values
+        # are durations/range bounds, not Unix timestamps.
+        if not 1_577_836_800 <= timestamp <= 4_102_444_800:
+            return None
         try:
             return datetime.fromtimestamp(timestamp, UTC)
         except OSError, OverflowError, ValueError:
@@ -201,30 +230,43 @@ async def async_setup_entry(
 
     @callback
     def async_add_new_orders() -> None:
-        new_order_ids = coordinator.data.active_order_ids - known_order_ids
+        registry = er.async_get(hass)
+        candidate_order_ids = set(coordinator.data.active_order_ids)
+        for order_id in coordinator.data.orders:
+            if any(
+                _owned_registry_entity(
+                    registry,
+                    entry.entry_id,
+                    unique_id,
+                )
+                is not None
+                for unique_id in (
+                    f"wolt_{order_id}",
+                    _order_unique_id(entry.entry_id, order_id, "status"),
+                    _order_unique_id(entry.entry_id, order_id, "eta"),
+                )
+            ):
+                candidate_order_ids.add(order_id)
+
+        new_order_ids = candidate_order_ids - known_order_ids
         if not new_order_ids:
             return
         known_order_ids.update(new_order_ids)
         entities: list[SensorEntity] = []
-        registry = er.async_get(hass)
         for order_id in sorted(new_order_ids):
             status_unique_id = _order_unique_id(entry.entry_id, order_id, "status")
-            legacy_entity_id = registry.async_get_entity_id(
-                "sensor", DOMAIN, f"wolt_{order_id}"
-            )
-            legacy_entity = (
-                registry.async_get(legacy_entity_id)
-                if legacy_entity_id is not None
-                else None
+            legacy_entity = _owned_registry_entity(
+                registry,
+                entry.entry_id,
+                f"wolt_{order_id}",
             )
             if (
                 legacy_entity is not None
-                and legacy_entity.config_entry_id == entry.entry_id
                 and registry.async_get_entity_id("sensor", DOMAIN, status_unique_id)
                 is None
             ):
                 registry.async_update_entity(
-                    legacy_entity_id,
+                    legacy_entity.entity_id,
                     new_unique_id=status_unique_id,
                     translation_key="order_status",
                     has_entity_name=True,
@@ -239,6 +281,17 @@ async def async_setup_entry(
 
     async_add_new_orders()
     entry.async_on_unload(coordinator.async_add_listener(async_add_new_orders))
+
+
+def _owned_registry_entity(
+    registry: er.EntityRegistry,
+    entry_id: str,
+    unique_id: str,
+) -> er.RegistryEntry | None:
+    """Return a sensor registry entity only when this config entry owns it."""
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+    entity = registry.async_get(entity_id) if entity_id is not None else None
+    return entity if entity is not None and entity.config_entry_id == entry_id else None
 
 
 def _order_unique_id(entry_id: str, order_id: str, key: str) -> str:
@@ -278,12 +331,11 @@ class WoltOrderEntity(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEntity
     @property
     def device_info(self) -> DeviceInfo:
         """Group status and ETA under a stable per-purchase device."""
-        suffix = self.order_id[-6:] if len(self.order_id) > 6 else self.order_id
         return DeviceInfo(
             identifiers={(DOMAIN, f"{self._entry_id}:{self.order_id}")},
             manufacturer="Wolt",
             model="Delivery order",
-            name=f"Wolt order •••{suffix}",
+            name="Wolt order",
         )
 
 
@@ -309,9 +361,8 @@ class WoltOrderStatusSensor(WoltOrderEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose only a documented venue label, never order payload fragments."""
-        venue_name = self._order_data.get("venue_name")
-        return {"venue_name": venue_name} if isinstance(venue_name, str) else {}
+        """Never persist order metadata or payload fragments as attributes."""
+        return {}
 
 
 class WoltOrderEtaSensor(WoltOrderEntity):
