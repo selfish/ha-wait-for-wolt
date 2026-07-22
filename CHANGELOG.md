@@ -51,6 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   metadata still reports the venue online.
 - Authoritative telemetry states other than `IN_PROGRESS` can no longer fall
   through to legacy heuristics and create false active-order entities.
+- Present but incomplete or malformed telemetry is also treated as authoritative
+  and cannot fall through to active-looking legacy hints.
 - Loaded-entry reauthentication now schedules exactly one reload instead of
   duplicating the immediate post-credential-update polling cycle.
 - Existing order status entities migrate to the scoped identity without losing

@@ -25,17 +25,19 @@ TokenUpdateCallback = Callable[[str, str], Awaitable[None] | None]
 
 def is_active_order(order: dict[str, Any]) -> bool:
     """Return whether an order-list item represents a trackable active order."""
-    telemetry = order.get("telemetry")
-    status_type = (
-        telemetry.get("order_status_type")
-        if isinstance(telemetry, dict)
-        else order.get("order_status_type")
-    )
-    if status_type is not None:
+    if "telemetry" in order:
+        telemetry = order["telemetry"]
+        status_type = (
+            telemetry.get("order_status_type") if isinstance(telemetry, dict) else None
+        )
         # Current Wolt order-list payloads provide an authoritative telemetry
-        # state. Do not let legacy CTA/text heuristics override any non-active
-        # telemetry value such as COMPLETED or PENDING.
+        # object. Its absence from an otherwise present/malformed object must
+        # not reactivate an order through legacy CTA/text heuristics.
         return str(status_type).upper() == "IN_PROGRESS"
+    if "order_status_type" in order:
+        # Older payloads occasionally exposed the same authoritative state at
+        # the top level instead of inside ``telemetry``.
+        return str(order["order_status_type"]).upper() == "IN_PROGRESS"
 
     call_to_action = order.get("call_to_action")
     if isinstance(call_to_action, dict):
