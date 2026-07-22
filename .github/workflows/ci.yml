@@ -60,7 +60,16 @@ jobs:
         with:
           category: integration
           comment: false
-          ignore: brands topics
+          # HACS reads license metadata from the default branch. The PR checks
+          # the reviewed LICENSE file below; the push-to-main run verifies the
+          # repository metadata after merge.
+          ignore: ${{ github.event_name == 'pull_request' && 'brands topics license' || 'brands topics' }}
+      - name: Verify reviewed license file
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          test -f LICENSE
+          grep -qx 'MIT License' LICENSE
 
   package:
     name: Package exact commit

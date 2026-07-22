@@ -31,9 +31,10 @@ validation action. CI action revisions and Python dependencies are pinned; Depen
 maintains both groups monthly.
 
 HACS brand and repository-topic checks are temporarily ignored because the repository
-has no approved brand asset and the automation App cannot edit repository topics. The
-remaining HACS checks still run visibly. A repository license is also required before
-HACS validation can pass; selecting that license remains an explicit owner decision.
+has no approved brand asset and the automation App cannot edit repository topics. On
+pull requests, the workflow verifies the reviewed MIT `LICENSE` file directly because
+HACS reads license metadata from the default branch; after merge, the push workflow
+validates the repository's detected license through HACS as well.
 
 ## Fixture privacy rules
 
