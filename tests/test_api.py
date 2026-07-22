@@ -149,6 +149,41 @@ async def test_active_orders_keeps_legacy_tracking_fallback_without_telemetry() 
 
 
 @pytest.mark.parametrize(
+    "telemetry",
+    [{}, None, [], {"order_status_type": None}],
+)
+async def test_active_orders_rejects_present_incomplete_telemetry(
+    telemetry: Any,
+) -> None:
+    """Never let a malformed present telemetry object reach legacy heuristics."""
+    not_active = {
+        "purchase_id": "purchase-not-active",
+        "telemetry": telemetry,
+        "call_to_action": {"type": "ORDER_TRACKING"},
+        "status": {"value": "Preparing"},
+    }
+    session = FakeSession(FakeResponse(200, {"orders": [not_active]}))
+
+    assert await make_api(session).fetch_active_orders() == []
+
+
+@pytest.mark.parametrize("status_type", ["IN_PROGRESS", "COMPLETED", None])
+async def test_active_orders_treats_legacy_top_level_status_as_authoritative(
+    status_type: str | None,
+) -> None:
+    """Apply the same strict contract to the older top-level status field."""
+    order = {
+        "order_id": "legacy-order",
+        "order_status_type": status_type,
+        "call_to_action": {"type": "ORDER_TRACKING"},
+    }
+    session = FakeSession(FakeResponse(200, {"orders": [order]}))
+
+    expected = [order] if status_type == "IN_PROGRESS" else []
+    assert await make_api(session).fetch_active_orders() == expected
+
+
+@pytest.mark.parametrize(
     ("method_name", "payload", "args"),
     [
         ("fetch_active_orders", {"orders": {"unexpected": "shape"}}, ()),
