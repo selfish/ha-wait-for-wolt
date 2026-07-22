@@ -1,0 +1,15 @@
+{
+  "order_details": [
+    {
+      "order_id": "sanitized-order-001",
+      "status": "delivery",
+      "delivery_eta": "2030-01-01T12:30:00Z",
+      "client_pre_estimate": "25-35 min",
+      "venue_name": "Sanitized Test Venue",
+      "payment_amount": "0.00 TEST",
+      "items": [
+        {"name": "Sanitized item"}
+      ]
+    }
+  ]
+}

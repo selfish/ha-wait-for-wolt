@@ -1,0 +1,20 @@
+{
+  "venue": {
+    "online": true,
+    "delivery_open_status": {
+      "is_open": true,
+      "value": "Open",
+      "next_close": "2030-01-01T20:00:00Z"
+    },
+    "delivery_configs": [
+      {
+        "method": "homedelivery",
+        "estimate": {"min": 20, "max": 30}
+      }
+    ],
+    "header": {"delivery_method_statuses": []},
+    "banners": []
+  },
+  "order_minimum": "0.00 TEST",
+  "is_venue_favourite": false
+}

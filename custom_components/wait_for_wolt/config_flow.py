@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import voluptuous as vol
-from homeassistant.helpers.selector import TextSelector
-
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
+from homeassistant.helpers.selector import TextSelector
+
 from .const import (
-    DOMAIN,
-    CONF_SESSION_ID,
     CONF_BEARER_TOKEN,
     CONF_REFRESH_TOKEN,
+    CONF_SESSION_ID,
     CONF_VENUE_IDS,
     DEFAULT_NAME,
+    DOMAIN,
 )
 
 
@@ -61,20 +61,15 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 if v.strip()
             ]
 
-            data = {**self.config_entry.data}
-            data[CONF_SESSION_ID] = user_input[CONF_SESSION_ID]
-            data[CONF_BEARER_TOKEN] = user_input[CONF_BEARER_TOKEN]
-            data[CONF_REFRESH_TOKEN] = user_input[CONF_REFRESH_TOKEN]
-
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data=data,
-                options={CONF_VENUE_IDS: venue_ids},
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_SESSION_ID: user_input[CONF_SESSION_ID],
+                    CONF_BEARER_TOKEN: user_input[CONF_BEARER_TOKEN],
+                    CONF_REFRESH_TOKEN: user_input[CONF_REFRESH_TOKEN],
+                    CONF_VENUE_IDS: venue_ids,
+                },
             )
-
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-
-            return self.async_create_entry(title="", data={})
 
         current = "\n".join(
             self.config_entry.options.get(
@@ -85,17 +80,28 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             {
                 vol.Required(
                     CONF_SESSION_ID,
-                    default=self.config_entry.data.get(CONF_SESSION_ID, ""),
+                    default=self.config_entry.options.get(
+                        CONF_SESSION_ID,
+                        self.config_entry.data.get(CONF_SESSION_ID, ""),
+                    ),
                 ): str,
                 vol.Required(
                     CONF_BEARER_TOKEN,
-                    default=self.config_entry.data.get(CONF_BEARER_TOKEN, ""),
+                    default=self.config_entry.options.get(
+                        CONF_BEARER_TOKEN,
+                        self.config_entry.data.get(CONF_BEARER_TOKEN, ""),
+                    ),
                 ): str,
                 vol.Required(
                     CONF_REFRESH_TOKEN,
-                    default=self.config_entry.data.get(CONF_REFRESH_TOKEN, ""),
+                    default=self.config_entry.options.get(
+                        CONF_REFRESH_TOKEN,
+                        self.config_entry.data.get(CONF_REFRESH_TOKEN, ""),
+                    ),
                 ): str,
-                vol.Optional(CONF_VENUE_IDS, default=current): TextSelector({"multiline": True}),
+                vol.Optional(CONF_VENUE_IDS, default=current): TextSelector(
+                    {"multiline": True}
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

@@ -62,3 +62,9 @@ ID on a new line.
 
 ## Limitations
 - The integration relies on tokens taken from the Wolt web site. If they become invalid you will need to capture new ones.
+- Treat every cookie and token as a password. Never post them in an issue, log, screenshot, or test fixture.
+
+## Development
+
+See [Development and verification](docs/DEVELOPMENT.md) for locked setup commands,
+sanitized-fixture rules, CI validation, and exact-commit review artifacts.

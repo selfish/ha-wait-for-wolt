@@ -1,0 +1,14 @@
+{
+  "venue": {
+    "online": false,
+    "delivery_open_status": {
+      "is_open": false,
+      "value": "Closed",
+      "next_open": "2030-01-02T08:00:00Z"
+    },
+    "delivery_configs": [],
+    "header": {"delivery_method_statuses": []},
+    "banners": []
+  },
+  "is_venue_favourite": false
+}
