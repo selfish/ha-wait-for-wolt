@@ -46,10 +46,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   of making every order entity unavailable.
 - Venue sensors now preserve an explicit closed status even when broader venue
   metadata still reports the venue online.
+- Authoritative telemetry states other than `IN_PROGRESS` can no longer fall
+  through to legacy heuristics and create false active-order entities.
+- Loaded-entry reauthentication now schedules exactly one reload instead of
+  duplicating the immediate post-credential-update polling cycle.
 
 ### Security
 
 - Rotated credentials are persisted without being logged.
 - Documentation and tests explicitly prohibit real Wolt or Home Assistant secrets.
+- Venue-update warnings no longer include configured venue slugs.
 
 [Unreleased]: https://github.com/selfish/ha-wait-for-wolt/compare/main...HEAD

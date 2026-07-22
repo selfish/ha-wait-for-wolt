@@ -2,8 +2,9 @@
 
 from unittest.mock import AsyncMock, Mock, patch
 
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.wait_for_wolt.api import (
@@ -132,3 +133,52 @@ async def test_auth_first_refresh_starts_reauthentication(
     assert len(flows) == 1
     assert flows[0]["context"]["source"] == "reauth"
     assert flows[0]["context"]["entry_id"] == entry.entry_id
+
+
+async def test_loaded_entry_reauthentication_schedules_exactly_one_reload(
+    hass: HomeAssistant,
+) -> None:
+    """Let the loaded entry update listener exclusively own reauth reload."""
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA)
+    entry.add_to_hass(hass)
+    api = Mock()
+    coordinator = Mock()
+    coordinator.data = WoltCoordinatorData({}, frozenset(), {})
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+
+    with (
+        patch("custom_components.wait_for_wolt.WoltApi", return_value=api),
+        patch(
+            "custom_components.wait_for_wolt.WoltDataUpdateCoordinator",
+            return_value=coordinator,
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        assert entry.state is ConfigEntryState.LOADED
+
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        assert result["type"] is FlowResultType.FORM
+
+        with patch.object(
+            hass.config_entries,
+            "async_reload",
+            AsyncMock(return_value=True),
+        ) as reload_entry:
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_SESSION_ID: "",
+                    CONF_BEARER_TOKEN: "sanitized-access-token-next",
+                    CONF_REFRESH_TOKEN: "sanitized-refresh-token-next",
+                },
+            )
+            await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    reload_entry.assert_awaited_once_with(entry.entry_id)

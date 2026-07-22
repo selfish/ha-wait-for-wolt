@@ -191,11 +191,11 @@ class WoltVenueSensor(SensorEntity):
             details = await self.api.fetch_venue_details(self.slug)
         except WoltApiError as err:
             self._attr_available = False
-            _LOGGER.warning("Unable to update Wolt venue %s: %s", self.slug, err)
+            _LOGGER.warning("Unable to update a configured Wolt venue: %s", err)
             return
         if not details:
             self._attr_available = False
-            _LOGGER.warning("Venue %s details not found", self.slug)
+            _LOGGER.warning("Configured Wolt venue details were not found")
             return
 
         venue = details.get("venue") or details.get("venue_info") or {}
