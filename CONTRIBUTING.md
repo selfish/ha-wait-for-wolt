@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Wolt Order Tracker. This is an unofficial Home Assistant integration built on Wolt's private consumer web API, so reliability, privacy, and conservative request behavior are core requirements.
+Thanks for helping improve Wait for Wolt. This is an unofficial Home Assistant integration built on Wolt's private consumer web API, so reliability, privacy, and conservative request behavior are core requirements.
 
 ## Before opening a change
 

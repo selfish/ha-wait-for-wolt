@@ -1,12 +1,35 @@
-# ha-wait-for-wolt
+# Wait for Wolt
 
-This custom component tracks your Wolt orders in Home Assistant. It polls the Wolt API using tokens that you obtain once from the web site and persists refreshed credentials in a Home Assistant config entry.
+**Wait for Wolt** is an unofficial Home Assistant custom integration for
+tracking active Wolt deliveries. It creates automation-friendly sensors for an
+order's normalized status and estimated arrival time, refreshes browser-derived
+Wolt credentials when needed, and can optionally monitor selected venues for
+availability and delivery estimates.
+
+The integration deliberately does not expose item lists, payment details,
+addresses, order identifiers, or raw Wolt responses as entity attributes. It is
+not affiliated with or endorsed by Wolt and relies on Wolt's private consumer
+web API, which may change without notice.
+
+## What it provides
+
+- A device for each active purchase, with a stable status sensor and timestamp
+  ETA sensor suitable for dashboards, notifications, and automations.
+- Automatic discovery of orders placed while Home Assistant is running.
+- Durable access-token refresh and Home Assistant reauthentication when saved
+  Wolt credentials stop working.
+- Optional venue sensors for open/closed status, delivery fees, and delivery
+  estimates when Wolt provides them.
+- Conservative shared polling and privacy-preserving diagnostics.
+
+Live courier maps, route points, spending history, and websocket updates are not
+part of the current release-ready feature set.
 
 ## Installation via HACS
 Requires Home Assistant 2026.7.0 or newer.
 
 1. Add this repository as a custom repository in [HACS](https://hacs.xyz/).
-2. Install **Wolt Order Tracker** and restart Home Assistant.
+2. Install **Wait for Wolt** and restart Home Assistant.
 
 ## Getting your tokens
 Tokens are required to authenticate with the Wolt API. The easiest way to
