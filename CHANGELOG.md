@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Wolt Order Tracker will be documented here.
+All notable changes to Wait for Wolt will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -37,6 +37,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   access or refresh tokens.
 - Order status entities use stable normalized enum values, config-entry-scoped
   unique IDs, and a shared per-purchase device.
+- The public display name is now **Wait for Wolt**, with clearer documentation
+  of the integration's current order, ETA, venue, and privacy boundaries.
 
 ### Fixed
 

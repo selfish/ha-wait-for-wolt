@@ -1,6 +1,6 @@
 {
   "domain": "wait_for_wolt",
-  "name": "Wolt Order Tracker",
+  "name": "Wait for Wolt",
   "codeowners": ["@selfish"],
   "config_flow": true,
   "documentation": "https://github.com/selfish/ha-wait-for-wolt",

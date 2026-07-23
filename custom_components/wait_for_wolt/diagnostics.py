@@ -1,4 +1,4 @@
-"""Privacy-preserving diagnostics for Wolt Order Tracker."""
+"""Privacy-preserving diagnostics for Wait for Wolt."""
 
 from __future__ import annotations
 
