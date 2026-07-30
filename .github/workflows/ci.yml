@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           uv run detect-secrets scan --all-files \
-            --exclude-files '^(\.venv|\.pytest_cache|\.ruff_cache)/' \
+            --exclude-files '^(\.git|\.venv|\.pytest_cache|\.ruff_cache)/' \
             --exclude-files '^uv\.lock$' > /tmp/detect-secrets.json
           uv run python - <<'PY'
           import json
