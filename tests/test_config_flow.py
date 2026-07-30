@@ -242,7 +242,11 @@ async def test_reauthentication_updates_credentials_and_reloads(
     hass: HomeAssistant,
 ) -> None:
     """Replace rejected secrets through Home Assistant's reauth flow."""
-    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA)
+    client_id = "11111111-1111-4111-8111-111111111111"
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={**ENTRY_DATA, CONF_CLIENT_ID: client_id},
+    )
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.flow.async_init(
@@ -271,6 +275,7 @@ async def test_reauthentication_updates_credentials_and_reloads(
     assert entry.data[CONF_SESSION_ID] == "sanitized-session-id"
     assert entry.data[CONF_BEARER_TOKEN] == "sanitized-access-token-next"
     assert entry.data[CONF_REFRESH_TOKEN] == "sanitized-refresh-token-next"
+    assert entry.data[CONF_CLIENT_ID] == client_id
     reload_entry.assert_awaited_once_with(entry.entry_id)
 
 

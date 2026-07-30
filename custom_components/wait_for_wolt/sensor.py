@@ -66,6 +66,16 @@ ORDER_ETA_DESCRIPTION = SensorEntityDescription(
 )
 
 
+def _contains_non_negated_status(value: str, *fragments: str) -> bool:
+    """Match status fragments without treating ``not_<state>`` as that state."""
+    return any(
+        fragment in value
+        and f"not_{fragment}" not in value
+        and f"non_{fragment}" not in value
+        for fragment in fragments
+    )
+
+
 def _raw_status(order: dict[str, Any]) -> str | None:
     """Extract a scalar status while respecting authoritative telemetry."""
     status_type: Any = None
@@ -90,17 +100,15 @@ def _raw_status(order: dict[str, Any]) -> str | None:
         display_status = re.sub(r"[^a-z0-9]+", "_", str(status).strip().lower()).strip(
             "_"
         )
-        if any(
-            token in display_status
-            for token in (
-                "delivered",
-                "completed",
-                "finished",
-                "cancel",
-                "fail",
-                "reject",
-                "refund",
-            )
+        if _contains_non_negated_status(
+            display_status,
+            "delivered",
+            "completed",
+            "finished",
+            "cancel",
+            "fail",
+            "reject",
+            "refund",
         ):
             return str(status_type)
     return str(status) if status is not None else None
@@ -112,30 +120,30 @@ def normalize_order_status(order: dict[str, Any]) -> str:
     if not raw:
         return "unknown"
     value = re.sub(r"[^a-z0-9]+", "_", raw.casefold()).strip("_")
-    if any(token in value for token in ("cancel", "refunded")):
+    if _contains_non_negated_status(value, "cancel", "refunded"):
         return "cancelled"
-    if any(token in value for token in ("fail", "reject", "declin")):
+    if _contains_non_negated_status(value, "fail", "reject", "declin"):
         return "failed"
-    if any(token in value for token in ("delivered", "completed", "finished")):
+    if _contains_non_negated_status(value, "delivered", "completed", "finished"):
         return "delivered"
-    if any(token in value for token in ("arriv", "nearby", "almost_there")):
+    if _contains_non_negated_status(value, "arriv", "nearby", "almost_there"):
         return "arriving"
-    if any(
-        token in value
-        for token in ("on_the_way", "en_route", "courier_delivery", "delivery")
+    if _contains_non_negated_status(
+        value, "picked_up", "courier_pickup", "delivery_pickup"
     ):
-        return "on_the_way"
-    if any(token in value for token in ("picked_up", "courier_pickup")):
         return "picked_up"
-    if any(token in value for token in ("ready", "awaiting_pickup")):
+    if _contains_non_negated_status(value, "ready", "awaiting_pickup"):
         return "ready_for_pickup"
-    if any(token in value for token in ("prepar", "production", "restaurant")):
+    if _contains_non_negated_status(value, "prepar", "production", "restaurant"):
         return "preparing"
-    if any(
-        token in value
-        for token in ("pending", "received", "created", "in_progress", "accepted")
+    if _contains_non_negated_status(
+        value, "pending", "received", "created", "in_progress", "accepted"
     ):
         return "pending"
+    if _contains_non_negated_status(
+        value, "on_the_way", "en_route", "courier_delivery", "delivery"
+    ):
+        return "on_the_way"
     return "unknown"
 
 

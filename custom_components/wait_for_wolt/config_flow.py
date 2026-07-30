@@ -130,6 +130,9 @@ class WoltConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 or entry.data.get(CONF_SESSION_ID, ""),
                 CONF_BEARER_TOKEN: user_input[CONF_BEARER_TOKEN],
                 CONF_REFRESH_TOKEN: user_input[CONF_REFRESH_TOKEN],
+                # Reauthentication rotates secrets, not the installation's
+                # stable Wolt web-client identity.
+                CONF_CLIENT_ID: entry.data.get(CONF_CLIENT_ID) or str(uuid.uuid4()),
             }
             try:
                 data_updates = await _async_validate_credentials(
