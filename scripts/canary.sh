@@ -35,6 +35,16 @@ logger:
   default: warning
 YAML
 
+# Import every shipped Python module from the extracted archive in the selected
+# Home Assistant runtime. This catches missing package files and import-time API
+# incompatibilities even though the disposable config has no real Wolt entry.
+docker run --rm \
+  --name "${NAME}-import" \
+  -w /config/custom_components \
+  -v "${WORK}/config:/config" \
+  "${IMAGE}" \
+  python -c 'import wait_for_wolt, wait_for_wolt.api, wait_for_wolt.config_flow, wait_for_wolt.const, wait_for_wolt.coordinator, wait_for_wolt.diagnostics, wait_for_wolt.sensor'
+
 docker run --rm \
   --name "${NAME}-check" \
   -v "${WORK}/config:/config" \
