@@ -35,6 +35,48 @@ jobs:
         run: uv run ruff format --check .
       - name: Test
         run: uv run pytest
+      - name: Verify version metadata
+        run: uv run python scripts/check_version.py
+      - name: Scan for committed secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run detect-secrets scan --all-files \
+            --exclude-files '^(\.venv|\.pytest_cache|\.ruff_cache)/' \
+            --exclude-files '^uv\.lock$' > /tmp/detect-secrets.json
+          uv run python - <<'PY'
+          import json
+          results = json.load(open("/tmp/detect-secrets.json"))["results"]
+          if results:
+              raise SystemExit(f"secret scan findings: {sorted(results)}")
+          PY
+
+  compatibility:
+    name: Home Assistant ${{ matrix.homeassistant }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        homeassistant:
+          - "2026.7.0"
+          - "2026.7.4"
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.COMMIT_SHA }}
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install uv
+        run: python -m pip install uv==0.11.25
+      - name: Install locked development dependencies
+        run: uv sync --frozen
+      - name: Select Home Assistant runtime
+        run: uv pip install --no-deps "homeassistant==${{ matrix.homeassistant }}"
+      - name: Test exact runtime
+        run: uv run pytest
 
   hassfest:
     name: Hassfest
@@ -60,10 +102,6 @@ jobs:
         with:
           category: integration
           comment: false
-          # HACS reads license metadata from the default branch. The PR checks
-          # the reviewed LICENSE file below; the push-to-main run verifies the
-          # repository metadata after merge.
-          ignore: ${{ github.event_name == 'pull_request' && 'brands topics license' || 'brands topics' }}
       - name: Verify reviewed license file
         if: github.event_name == 'pull_request'
         shell: bash
@@ -75,7 +113,9 @@ jobs:
     name: Package exact commit
     needs:
       - test
+      - compatibility
       - hassfest
+      - hacs
     runs-on: ubuntu-latest
     steps:
       - name: Check out the exact source commit
@@ -86,18 +126,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist
-          (
-            cd custom_components
-            python -m zipfile -c \
-              "../dist/wait_for_wolt-${COMMIT_SHA}.zip" \
-              wait_for_wolt
-          )
-          (
-            cd dist
-            sha256sum "wait_for_wolt-${COMMIT_SHA}.zip" > "wait_for_wolt-${COMMIT_SHA}.sha256"
-            printf 'commit=%s\n' "${COMMIT_SHA}" > "wait_for_wolt-${COMMIT_SHA}.metadata"
-          )
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "${COMMIT_SHA}")"
+          export SOURCE_DATE_EPOCH
+          python scripts/build_release.py --label "${COMMIT_SHA}"
+          (cd dist && sha256sum -c "wait_for_wolt-${COMMIT_SHA}.sha256")
+          printf 'commit=%s\n' "${COMMIT_SHA}" > "dist/wait_for_wolt-${COMMIT_SHA}.metadata"
+          python -m zipfile -l "dist/wait_for_wolt-${COMMIT_SHA}.zip"
       - name: Upload review artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

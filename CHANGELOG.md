@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0b1] - 2026-07-30
+
 ### Added
 
 - Offline Home Assistant tests with synthetic fixtures.
@@ -20,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Privacy-preserving diagnostics that expose operational counts without order,
   courier, venue, account-name, or credential values.
 - Typed per-purchase status and ETA entities with English and Hebrew UI translations.
+- A local brand icon, deterministic release archive, SHA-256 checksum, and
+  guarded tag-to-GitHub-Release workflow.
 
 ### Changed
 
@@ -39,6 +43,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   unique IDs, and a shared per-purchase device.
 - The public display name is now **Wait for Wolt**, with clearer documentation
   of the integration's current order, ETA, venue, and privacy boundaries.
+- Setup validates credentials before saving an entry. A refresh token can now
+  bootstrap the access token, so the short-lived access token is optional.
 
 ### Fixed
 
@@ -76,4 +82,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Order entities no longer expose item lists, payment values, addresses, or raw
   tracking payloads as state attributes.
 
-[Unreleased]: https://github.com/selfish/ha-wait-for-wolt/compare/main...HEAD
+[Unreleased]: https://github.com/selfish/ha-wait-for-wolt/compare/v0.1.0b1...HEAD
+[0.1.0b1]: https://github.com/selfish/ha-wait-for-wolt/releases/tag/v0.1.0b1

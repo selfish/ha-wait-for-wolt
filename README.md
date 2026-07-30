@@ -29,11 +29,27 @@ part of the current release-ready feature set.
 Requires Home Assistant 2026.7.0 or newer.
 
 1. Add this repository as a custom repository in [HACS](https://hacs.xyz/).
-2. Install **Wait for Wolt** and restart Home Assistant.
+2. Install the latest **Wait for Wolt** GitHub release and restart Home Assistant.
 
-## Getting your tokens
-Tokens are required to authenticate with the Wolt API. The easiest way to
-capture them is from your web browser after logging in.
+Release builds use versioned tags such as `v0.1.0b1`; HACS will no longer show
+commit hashes after the first release is published. Beta versions are opt-in
+validation builds and are not promoted to production without the canary matrix.
+
+## Authentication
+
+The integration needs a Wolt refresh token. The short-lived access token and
+analytics session ID are optional: when the access token is blank, the integration
+uses the refresh token once to obtain and persist a current token pair. Setup tests
+the credentials before saving the config entry.
+
+Wolt's web phone and email sign-in flows are private and protected by hCaptcha;
+Wolt does not provide a public consumer OAuth/device authorization flow for Home
+Assistant. Wait for Wolt therefore does **not** collect your phone number, email,
+password, SMS code, or email magic link. Implementing those private endpoints in a
+headless config flow would bypass the browser's anti-abuse step and could lock an
+account. See [Authentication design](docs/AUTHENTICATION.md) for the researched
+browser-mediated direction. Sign in on the official Wolt site, then copy the refresh
+credential locally:
 
 1. Log in to [wolt.com](https://wolt.com) and open the developer tools
    (usually <kbd>F12</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>).
@@ -59,12 +75,18 @@ capture them is from your web browser after logging in.
    })();
    ```
 
-   Copy the access and refresh tokens for use below. `SESSION_ID` is optional:
+   Copy the refresh token. The access token can reduce the first setup request but
+   is optional. `SESSION_ID` is also optional:
    accounts without analytics consent may not have `__woltUid`, and authenticated
    order requests work without that header. If a token is not printed, inspect an
    authenticated Wolt network request instead.
-4. Use these tokens in the configuration below. They will be refreshed
-   automatically when required.
+4. Paste the refresh token into Home Assistant. Treat it like a password; the
+   integration stores it in the config entry, rotates it when Wolt does, and never
+   logs it.
+
+This is still a browser-derived private credential, not supported Wolt OAuth. It is
+the least-privileged practical flow currently available. The project will adopt a
+first-party consumer OAuth/device flow if Wolt publishes one.
 
 
 ## Configuration
@@ -99,8 +121,9 @@ ID on a new line.
 
 The integration masks credential fields in setup, options, and reauthentication
 forms. In **Configure**, leave the access and refresh token fields blank to keep
-their saved values. If Wolt rejects both saved credentials, Home Assistant opens
-a reauthentication flow for replacement tokens.
+their saved values. Entering a new refresh token while leaving access blank safely
+bootstraps a new access token. If Wolt rejects the saved credentials, Home Assistant
+opens a reauthentication flow.
 
 ## How it works
 - The integration refreshes the bearer token automatically.
@@ -122,10 +145,15 @@ a reauthentication flow for replacement tokens.
 - It relies on Wolt's private consumer web API, which can change without notice.
 - If both the access and refresh tokens become invalid, you will need to capture new ones.
 - Treat every cookie and token as a password. Never post them in an issue, log, screenshot, or test fixture.
+- Wolt operates in multiple countries, and the integration has no Israel-only code;
+  `hacs.json` intentionally does not restrict installation by country.
 
 ## Development
 
 See [Development and verification](docs/DEVELOPMENT.md) for locked setup commands,
-sanitized-fixture rules, CI validation, and exact-commit review artifacts. Contributions
-must follow the [contributor guide](CONTRIBUTING.md) and [security policy](.github/SECURITY.md).
-Release-facing changes are recorded in the [changelog](CHANGELOG.md).
+sanitized-fixture rules, CI validation, and exact-commit review artifacts. Upgrade users
+should read the [migration notes](docs/MIGRATION.md); maintainers use the
+[canary matrix](docs/CANARY.md) and [release process](docs/RELEASE.md).
+Contributions must follow the [contributor guide](CONTRIBUTING.md) and
+[security policy](.github/SECURITY.md). Release-facing changes are recorded in the
+[changelog](CHANGELOG.md).

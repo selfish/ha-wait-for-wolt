@@ -453,6 +453,40 @@ def test_order_unique_ids_are_scoped_to_the_config_entry() -> None:
     assert first.unique_id != second.unique_id
 
 
+async def test_legacy_venue_unique_id_migrates_to_config_entry_scope(
+    hass: HomeAssistant,
+) -> None:
+    """Preserve venue registry customizations while enabling multiple accounts."""
+    slug = "sanitized-venue"
+    coordinator = mock_coordinator(WoltCoordinatorData({}, frozenset(), {}))
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_NAME: "Sanitized Wolt", CONF_VENUE_IDS: [slug]},
+    )
+    api = AsyncMock(spec=WoltApi)
+    entry.runtime_data = WoltRuntimeData(api, coordinator)
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    legacy = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"wolt_venue_{slug}",
+        config_entry=entry,
+        suggested_object_id="favorite_place",
+    )
+    add_entities = Mock()
+
+    await async_setup_entry(hass, entry, add_entities)
+
+    migrated = registry.async_get(legacy.entity_id)
+    assert migrated is not None
+    assert migrated.unique_id == f"{entry.entry_id}_venue_{slug}"
+    assert migrated.entity_id == "sensor.favorite_place"
+    venue = add_entities.call_args.args[0][0]
+    assert venue.unique_id == migrated.unique_id
+    assert add_entities.call_args.kwargs == {"update_before_add": True}
+
+
 @pytest.mark.parametrize(
     ("fixture_name", "expected_state"),
     [("venue_open.json", "open"), ("venue_closed.json", "closed")],
@@ -464,11 +498,13 @@ async def test_venue_sensor_state_and_availability(
     """Handle open and explicitly closed venues without assuming metadata exists."""
     api = AsyncMock(spec=WoltApi)
     api.fetch_venue_details.return_value = load_json_fixture(fixture_name)
-    sensor = WoltVenueSensor(api, "sanitized-venue", "Wolt sanitized-venue")
+    sensor = WoltVenueSensor(
+        api, "entry-001", "sanitized-venue", "Wolt sanitized-venue"
+    )
 
     await sensor.async_update()
 
-    assert sensor.unique_id == "wolt_venue_sanitized-venue"
+    assert sensor.unique_id == "entry-001_venue_sanitized-venue"
     assert sensor.native_value == expected_state
     assert sensor.available
 
@@ -487,7 +523,9 @@ async def test_venue_sensor_respects_explicit_closed_status() -> None:
             "delivery_open_status": {"is_open": False},
         }
     }
-    sensor = WoltVenueSensor(api, "sanitized-venue", "Wolt sanitized-venue")
+    sensor = WoltVenueSensor(
+        api, "entry-001", "sanitized-venue", "Wolt sanitized-venue"
+    )
 
     await sensor.async_update()
 

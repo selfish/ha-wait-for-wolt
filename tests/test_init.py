@@ -1,5 +1,6 @@
 """Tests for the Wait for Wolt config-entry lifecycle."""
 
+import uuid
 from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
@@ -14,6 +15,7 @@ from custom_components.wait_for_wolt.api import (
 )
 from custom_components.wait_for_wolt.const import (
     CONF_BEARER_TOKEN,
+    CONF_CLIENT_ID,
     CONF_REFRESH_TOKEN,
     CONF_SESSION_ID,
     CONF_VENUE_IDS,
@@ -58,6 +60,9 @@ async def test_config_entry_setup_rotation_reload_and_unload(
         assert entry.state is ConfigEntryState.LOADED
         coordinator.async_config_entry_first_refresh.assert_awaited_once_with()
         coordinator_class.assert_called_once_with(hass, entry, api)
+        generated_client_id = entry.data[CONF_CLIENT_ID]
+        assert str(uuid.UUID(generated_client_id)) == generated_client_id
+        assert api_class.call_args.kwargs["client_id"] == generated_client_id
 
         token_callback = api_class.call_args.kwargs["token_update_callback"]
         with patch.object(
@@ -67,6 +72,7 @@ async def test_config_entry_setup_rotation_reload_and_unload(
             await hass.async_block_till_done()
             assert entry.data[CONF_BEARER_TOKEN] == "rotated-access-token"
             assert entry.data[CONF_REFRESH_TOKEN] == "rotated-refresh-token"
+            assert entry.data[CONF_CLIENT_ID] == generated_client_id
             reload_entry.assert_not_awaited()
 
             hass.config_entries.async_update_entry(
@@ -164,11 +170,17 @@ async def test_loaded_entry_reauthentication_schedules_exactly_one_reload(
         )
         assert result["type"] is FlowResultType.FORM
 
-        with patch.object(
-            hass.config_entries,
-            "async_reload",
-            AsyncMock(return_value=True),
-        ) as reload_entry:
+        with (
+            patch(
+                "custom_components.wait_for_wolt.config_flow.WoltApi.fetch_orders",
+                AsyncMock(return_value=[]),
+            ),
+            patch.object(
+                hass.config_entries,
+                "async_reload",
+                AsyncMock(return_value=True),
+            ) as reload_entry,
+        ):
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"],
                 {

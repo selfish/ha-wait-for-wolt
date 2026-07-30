@@ -1,15 +1,24 @@
 """Tests for UI setup and options updates."""
 
+import uuid
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from homeassistant.config_entries import SOURCE_IMPORT, SOURCE_REAUTH, SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.wait_for_wolt import async_reload_entry
+from custom_components.wait_for_wolt.api import (
+    WoltAuthenticationError,
+    WoltConnectionError,
+    WoltInvalidPayloadError,
+)
+from custom_components.wait_for_wolt.config_flow import _async_validate_credentials
 from custom_components.wait_for_wolt.const import (
     CONF_BEARER_TOKEN,
+    CONF_CLIENT_ID,
     CONF_REFRESH_TOKEN,
     CONF_SESSION_ID,
     CONF_VENUE_IDS,
@@ -23,6 +32,16 @@ ENTRY_DATA = {
     CONF_REFRESH_TOKEN: "sanitized-refresh-token",
     CONF_VENUE_IDS: ["sanitized-venue"],
 }
+
+
+@pytest.fixture(autouse=True)
+def valid_wolt_credentials():
+    """Keep config-flow tests offline while exercising credential validation."""
+    with patch(
+        "custom_components.wait_for_wolt.config_flow.WoltApi.fetch_orders",
+        AsyncMock(return_value=[]),
+    ) as fetch_orders:
+        yield fetch_orders
 
 
 async def test_user_flow_parses_venue_lines(hass: HomeAssistant) -> None:
@@ -47,6 +66,8 @@ async def test_user_flow_parses_venue_lines(hass: HomeAssistant) -> None:
         "sanitized-venue",
         "second-sanitized-venue",
     ]
+    generated_client_id = result["data"][CONF_CLIENT_ID]
+    assert str(uuid.UUID(generated_client_id)) == generated_client_id
 
 
 async def test_user_flow_allows_missing_analytics_session(
@@ -68,6 +89,76 @@ async def test_user_flow_allows_missing_analytics_session(
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_SESSION_ID] == ""
+
+
+async def test_user_flow_allows_refresh_token_only(hass: HomeAssistant) -> None:
+    """Let the API bootstrap a short-lived access token from the refresh token."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_USER},
+    )
+    user_input = {**ENTRY_DATA}
+    user_input.pop(CONF_BEARER_TOKEN)
+    user_input[CONF_VENUE_IDS] = ""
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input,
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_BEARER_TOKEN] == ""
+    assert result["data"][CONF_REFRESH_TOKEN] == "sanitized-refresh-token"
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_error"),
+    [
+        (WoltAuthenticationError("rejected"), "invalid_auth"),
+        (WoltConnectionError("offline"), "cannot_connect"),
+        (WoltInvalidPayloadError("changed"), "invalid_response"),
+    ],
+)
+async def test_user_flow_rejects_unverified_credentials(
+    hass: HomeAssistant,
+    valid_wolt_credentials: AsyncMock,
+    failure: Exception,
+    expected_error: str,
+) -> None:
+    """Never save credentials that fail the first account request."""
+    valid_wolt_credentials.side_effect = failure
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_USER},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {**ENTRY_DATA, CONF_VENUE_IDS: ""},
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": expected_error}
+    assert not hass.config_entries.async_entries(DOMAIN)
+
+
+async def test_validation_persists_rotated_tokens(hass: HomeAssistant) -> None:
+    """Do not consume a one-time refresh token without retaining its replacement."""
+
+    class RotatingApi:
+        def __init__(self, *_args, token_update_callback, **_kwargs) -> None:
+            self._callback = token_update_callback
+
+        async def fetch_orders(self):
+            await self._callback("rotated-access", "rotated-refresh")
+            return []
+
+    with patch("custom_components.wait_for_wolt.config_flow.WoltApi", RotatingApi):
+        validated = await _async_validate_credentials(hass, ENTRY_DATA)
+
+    assert validated[CONF_BEARER_TOKEN] == "rotated-access"
+    assert validated[CONF_REFRESH_TOKEN] == "rotated-refresh"
+    generated_client_id = validated[CONF_CLIENT_ID]
+    assert str(uuid.UUID(generated_client_id)) == generated_client_id
 
 
 async def test_legacy_yaml_import_creates_one_durable_entry(

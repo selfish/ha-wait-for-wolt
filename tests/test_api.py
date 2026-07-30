@@ -16,6 +16,7 @@ from custom_components.wait_for_wolt.api import (
 )
 from custom_components.wait_for_wolt.const import (
     ACTIVE_ORDERS_URL,
+    ORDER_DETAILS_PATH_URL,
     ORDER_DETAILS_URL,
     REFRESH_URL,
     VENUE_CONTENT_URL,
@@ -215,6 +216,33 @@ async def test_malformed_json_raises_typed_payload_exception() -> None:
         await api.fetch_active_orders()
 
 
+async def test_missing_access_token_refreshes_before_first_account_request() -> None:
+    """Bootstrap from one refresh token without sending an empty bearer header."""
+    session = FakeSession(
+        FakeResponse(
+            200,
+            {
+                "access_token": "bootstrapped-access-token",
+                "refresh_token": "rotated-refresh-token",
+            },
+        ),
+        FakeResponse(200, {"orders": []}),
+    )
+    api = WoltApi(
+        session,  # type: ignore[arg-type]
+        None,
+        "",
+        "test-refresh-token",
+    )
+
+    assert await api.fetch_orders() == []
+    assert [call["url"] for call in session.calls] == [REFRESH_URL, ACTIVE_ORDERS_URL]
+    assert "authorization" not in session.calls[0]["headers"]
+    assert session.calls[1]["headers"]["authorization"] == (
+        "Bearer bootstrapped-access-token"
+    )
+
+
 async def test_unauthorized_request_refreshes_persists_and_retries_once() -> None:
     """Refresh only after 401, expose rotation, notify persistence, and retry once."""
     rotated = ("next-access-token", "next-refresh-token")
@@ -391,6 +419,39 @@ async def test_order_details_accepts_legacy_list_shape() -> None:
     assert await make_api(session).fetch_order_details("purchase-001") == {
         "status": "delivery"
     }
+
+
+@pytest.mark.parametrize("missing_status", [404, 405])
+async def test_order_details_falls_back_to_observed_path_form(
+    missing_status: int,
+) -> None:
+    """Support both private purchase-tracking URL forms seen in live clients."""
+    session = FakeSession(
+        FakeResponse(missing_status),
+        FakeResponse(200, {"order_details": {"status": "delivery"}}),
+    )
+
+    assert await make_api(session).fetch_order_details("purchase/with space") == {
+        "status": "delivery"
+    }
+    assert [call["url"] for call in session.calls] == [
+        ORDER_DETAILS_URL.format("purchase%2Fwith%20space"),
+        ORDER_DETAILS_PATH_URL.format("purchase%2Fwith%20space"),
+    ]
+
+
+async def test_web_client_identifier_is_generated_per_api_instance() -> None:
+    """Do not ship one captured browser identifier to every installation."""
+    first_session = FakeSession(FakeResponse(200, {"orders": []}))
+    second_session = FakeSession(FakeResponse(200, {"orders": []}))
+
+    await make_api(first_session).fetch_orders()
+    await make_api(second_session).fetch_orders()
+
+    first_id = first_session.calls[0]["headers"]["x-wolt-web-clientid"]
+    second_id = second_session.calls[0]["headers"]["x-wolt-web-clientid"]
+    assert first_id != second_id
+    assert len(first_id) == len(second_id) == 36
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,7 @@ DOMAIN = "wait_for_wolt"
 
 CONF_SESSION_ID = "session_id"
 CONF_BEARER_TOKEN = "bearer_token"
+CONF_CLIENT_ID = "client_id"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_VENUE_IDS = "venue_ids"
 
@@ -15,6 +16,9 @@ ACTIVE_ORDERS_URL = "https://consumer-api.wolt.com/order-xp/web/v1/pages/orders"
 ORDER_DETAILS_URL = (
     "https://restaurant-api.wolt.com/v2/order_details/purchase_tracking?purchase_id={}"
 )
+ORDER_DETAILS_PATH_URL = (
+    "https://restaurant-api.wolt.com/v2/order_details/purchase_tracking/{}"
+)
 VENUE_CONTENT_URL = "https://consumer-api.wolt.com/order-xp/web/v1/venue/slug/{}/dynamic/?selected_delivery_method=homedelivery"
 
 HEADERS = {
@@ -22,8 +26,7 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Platform": "Web",
     "App-Language": "en",
-    "ClientVersionNumber": "1.15.28",
-    "Client-Version": "1.15.28",
+    "ClientVersionNumber": "1.16.79",
+    "Client-Version": "1.16.79",
     "App-Currency-Format": "wqQxLDIzNC41Ng==",
-    "x-wolt-web-clientid": "76cc0f70-9891-4c90-ab38-e6b5fdab4c02",
 }

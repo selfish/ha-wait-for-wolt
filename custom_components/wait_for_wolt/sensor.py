@@ -221,8 +221,28 @@ async def async_setup_entry(
     name = data.get(CONF_NAME, DEFAULT_NAME)
     venues = data.get(CONF_VENUE_IDS, [])
     if venues:
+        registry = er.async_get(hass)
+        for slug in venues:
+            scoped_unique_id = _venue_unique_id(entry.entry_id, slug)
+            legacy_entity = _owned_registry_entity(
+                registry,
+                entry.entry_id,
+                f"wolt_venue_{slug}",
+            )
+            if (
+                legacy_entity is not None
+                and registry.async_get_entity_id("sensor", DOMAIN, scoped_unique_id)
+                is None
+            ):
+                registry.async_update_entity(
+                    legacy_entity.entity_id,
+                    new_unique_id=scoped_unique_id,
+                )
         async_add_entities(
-            [WoltVenueSensor(api, slug, f"{name} {slug}") for slug in venues],
+            [
+                WoltVenueSensor(api, entry.entry_id, slug, f"{name} {slug}")
+                for slug in venues
+            ],
             update_before_add=True,
         )
 
@@ -297,6 +317,11 @@ def _owned_registry_entity(
 def _order_unique_id(entry_id: str, order_id: str, key: str) -> str:
     """Scope purchase entities to one config entry."""
     return f"{entry_id}_{order_id}_{key}"
+
+
+def _venue_unique_id(entry_id: str, slug: str) -> str:
+    """Scope venue entities to one config entry."""
+    return f"{entry_id}_venue_{slug}"
 
 
 class WoltOrderEntity(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEntity):
@@ -391,11 +416,11 @@ class WoltVenueSensor(SensorEntity):
 
     _attr_attribution = "Data provided by Wolt"
 
-    def __init__(self, api: WoltApi, slug: str, name: str) -> None:
+    def __init__(self, api: WoltApi, entry_id: str, slug: str, name: str) -> None:
         self.api = api
         self.slug = slug
         self._attr_name = name
-        self._attr_unique_id = f"wolt_venue_{slug}"
+        self._attr_unique_id = _venue_unique_id(entry_id, slug)
         self._state = None
         self._attr_extra_state_attributes = {}
         self._attr_available = False
