@@ -22,11 +22,11 @@ SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
   uv run python scripts/build_release.py --label canary --output-dir "${WORK}"
 (
   cd "${WORK}"
-  sha256sum -c wait_for_wolt-canary.sha256
+  sha256sum -c wait_for_wolt.sha256
 )
 mkdir -p "${WORK}/config/custom_components"
 python -m zipfile -e \
-  "${WORK}/wait_for_wolt-canary.zip" \
+  "${WORK}/wait_for_wolt.zip" \
   "${WORK}/config/custom_components"
 cat > "${WORK}/config/configuration.yaml" <<'YAML'
 homeassistant:

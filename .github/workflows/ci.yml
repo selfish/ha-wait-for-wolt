@@ -129,6 +129,8 @@ jobs:
           export SOURCE_DATE_EPOCH
           python scripts/build_release.py --label "${COMMIT_SHA}"
           (cd dist && sha256sum -c "wait_for_wolt-${COMMIT_SHA}.sha256")
+          (cd dist && sha256sum -c wait_for_wolt.sha256)
+          cmp "dist/wait_for_wolt-${COMMIT_SHA}.zip" dist/wait_for_wolt.zip
           printf 'commit=%s\n' "${COMMIT_SHA}" > "dist/wait_for_wolt-${COMMIT_SHA}.metadata"
           python -m zipfile -l "dist/wait_for_wolt-${COMMIT_SHA}.zip"
       - name: Upload review artifact

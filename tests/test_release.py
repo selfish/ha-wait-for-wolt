@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from scripts.build_release import build
-from scripts.check_version import check_version
+from scripts.build_release import HACS_ARCHIVE_NAME, build
+from scripts.check_version import ROOT, check_version
 
 
 def test_project_versions_agree() -> None:
@@ -24,6 +25,13 @@ def test_release_tag_must_match_version() -> None:
         check_version("v9.9.9")
 
 
+def test_hacs_uses_the_fixed_release_asset() -> None:
+    """Make HACS install the exact validated asset instead of a source archive."""
+    manifest = json.loads((ROOT / "hacs.json").read_text())
+    assert manifest["zip_release"] is True
+    assert manifest["filename"] == HACS_ARCHIVE_NAME
+
+
 def test_release_archive_is_clean_and_checksum_matches(tmp_path: Path) -> None:
     """Package only the integration under the HACS-compatible directory root."""
     archive = build("test", tmp_path)
@@ -31,6 +39,13 @@ def test_release_archive_is_clean_and_checksum_matches(tmp_path: Path) -> None:
 
     assert filename == archive.name
     assert checksum == hashlib.sha256(archive.read_bytes()).hexdigest()
+    hacs_archive = tmp_path / HACS_ARCHIVE_NAME
+    hacs_checksum, hacs_filename = (
+        hacs_archive.with_suffix(".sha256").read_text().split()
+    )
+    assert hacs_filename == HACS_ARCHIVE_NAME
+    assert hacs_checksum == checksum
+    assert hacs_archive.read_bytes() == archive.read_bytes()
     with zipfile.ZipFile(archive) as bundle:
         names = bundle.namelist()
     assert "wait_for_wolt/manifest.json" in names

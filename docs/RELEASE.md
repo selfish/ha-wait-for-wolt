@@ -9,7 +9,7 @@ The same version must appear in:
 - the changelog section;
 - the Git tag, prefixed by `v`.
 
-`scripts/check_version.py` enforces metadata and tag agreement. `scripts/build_release.py` creates a deterministic component archive and adjacent SHA-256 checksum. CI also packages the exact reviewed commit.
+`scripts/check_version.py` enforces metadata and tag agreement. `scripts/build_release.py` creates a deterministic versioned archive/checksum plus byte-identical `wait_for_wolt.zip` and `wait_for_wolt.sha256` assets. The stable filename is declared in `hacs.json`, so HACS installs the validated release asset rather than GitHub's automatically generated source archive. CI also packages the exact reviewed commit.
 
 ## Release checklist
 

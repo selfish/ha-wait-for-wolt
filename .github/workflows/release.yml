@@ -66,6 +66,8 @@ jobs:
           export SOURCE_DATE_EPOCH
           uv run python scripts/build_release.py --label "${VERSION}"
           (cd dist && sha256sum -c "wait_for_wolt-${VERSION}.sha256")
+          (cd dist && sha256sum -c wait_for_wolt.sha256)
+          cmp "dist/wait_for_wolt-${VERSION}.zip" dist/wait_for_wolt.zip
           printf 'version=%s\ncommit=%s\n' \
             "${VERSION}" "$(git rev-parse HEAD)" > "dist/wait_for_wolt-${VERSION}.metadata"
           python -m zipfile -l "dist/wait_for_wolt-${VERSION}.zip"
@@ -81,6 +83,8 @@ jobs:
             *a*|*b*|*rc*) prerelease=(--prerelease) ;;
           esac
           gh release create "${GITHUB_REF_NAME}" \
+            "dist/wait_for_wolt.zip" \
+            "dist/wait_for_wolt.sha256" \
             "dist/wait_for_wolt-${VERSION}.zip" \
             "dist/wait_for_wolt-${VERSION}.sha256" \
             "dist/wait_for_wolt-${VERSION}.metadata" \
