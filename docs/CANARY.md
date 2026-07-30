@@ -27,10 +27,9 @@ scripts/canary.sh
 ```
 
 The checksum must refer to `wait_for_wolt.zip`, and the metadata must contain the
-current checkout's exact `commit=<SHA>` line. Set `CANARY_EXPECTED_COMMIT` only
-when deliberately validating against another immutable checkout. HACS extracts
-the fixed archive into `/config/custom_components/wait_for_wolt`, so the canary
-uses that same extraction root. The script refuses a dirty checkout so its source,
+current checkout's exact `commit=<SHA>` line. HACS extracts the fixed archive into
+`/config/custom_components/wait_for_wolt`, so the canary uses that same extraction
+root. The script refuses a dirty checkout and has no commit override, so its source,
 reported version, and metadata cannot silently refer to different commits.
 
 ## Operational canary

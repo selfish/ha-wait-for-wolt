@@ -22,7 +22,7 @@ if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
   exit 2
 fi
 VERSION="$(uv run python scripts/check_version.py)"
-EXPECTED_COMMIT="${CANARY_EXPECTED_COMMIT:-$(git rev-parse HEAD)}"
+EXPECTED_COMMIT="$(git rev-parse HEAD)"
 if [[ -n "${CANARY_ARCHIVE:-}" || -n "${CANARY_CHECKSUM:-}" || -n "${CANARY_METADATA:-}" ]]; then
   if [[ ! -f "${CANARY_ARCHIVE:-}" || ! -f "${CANARY_CHECKSUM:-}" || ! -f "${CANARY_METADATA:-}" ]]; then
     echo "CANARY_ARCHIVE, CANARY_CHECKSUM, and CANARY_METADATA must all name readable files" >&2
