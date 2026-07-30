@@ -162,6 +162,7 @@ async def test_loaded_entry_reauthentication_schedules_exactly_one_reload(
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         assert entry.state is ConfigEntryState.LOADED
+        stable_client_id = entry.data[CONF_CLIENT_ID]
 
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -193,4 +194,5 @@ async def test_loaded_entry_reauthentication_schedules_exactly_one_reload(
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_CLIENT_ID] == stable_client_id
     reload_entry.assert_awaited_once_with(entry.entry_id)
