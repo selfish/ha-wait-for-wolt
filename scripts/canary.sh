@@ -18,8 +18,17 @@ trap cleanup EXIT
 
 cd "${ROOT}"
 VERSION="$(uv run python scripts/check_version.py)"
-SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
-  uv run python scripts/build_release.py --label canary --output-dir "${WORK}"
+if [[ -n "${CANARY_ARCHIVE:-}" || -n "${CANARY_CHECKSUM:-}" ]]; then
+  if [[ ! -f "${CANARY_ARCHIVE:-}" || ! -f "${CANARY_CHECKSUM:-}" ]]; then
+    echo "CANARY_ARCHIVE and CANARY_CHECKSUM must both name readable files" >&2
+    exit 2
+  fi
+  cp "${CANARY_ARCHIVE}" "${WORK}/wait_for_wolt.zip"
+  cp "${CANARY_CHECKSUM}" "${WORK}/wait_for_wolt.sha256"
+else
+  SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
+    uv run python scripts/build_release.py --label canary --output-dir "${WORK}"
+fi
 (
   cd "${WORK}"
   sha256sum -c wait_for_wolt.sha256

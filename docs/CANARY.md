@@ -15,6 +15,19 @@ No production installation is the first consumer of a release artifact.
 
 Set `HA_IMAGE` to repeat against another supported Home Assistant image.
 
+To test downloaded CI or GitHub release assets instead of rebuilding locally, pass
+both fixed-name files:
+
+```bash
+CANARY_ARCHIVE=/path/to/wait_for_wolt.zip \
+CANARY_CHECKSUM=/path/to/wait_for_wolt.sha256 \
+HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.7.4 \
+scripts/canary.sh
+```
+
+The checksum must refer to `wait_for_wolt.zip`. This is also the filename HACS
+downloads because `hacs.json` declares the fixed release asset.
+
 ## Operational canary
 
 Use a disposable Home Assistant instance or a clone with recorder and outbound notifications disabled. Never upload its `.storage` files or logs.
