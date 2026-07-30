@@ -266,6 +266,9 @@ async def test_in_progress_telemetry_rejects_stale_final_display_status() -> Non
         ("delivery pickup", "picked_up"),
         ("preparing not delivered", "preparing"),
         ("not cancelled", "unknown"),
+        ("not yet delivered", "unknown"),
+        ("delivery not yet completed", "on_the_way"),
+        ("not currently ready", "unknown"),
         ("new private state", "unknown"),
     ],
 )

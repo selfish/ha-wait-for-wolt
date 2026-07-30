@@ -67,11 +67,14 @@ ORDER_ETA_DESCRIPTION = SensorEntityDescription(
 
 
 def _contains_non_negated_status(value: str, *fragments: str) -> bool:
-    """Match status fragments without treating ``not_<state>`` as that state."""
+    """Match fragments without treating negative status phrases as that state."""
     return any(
         fragment in value
-        and f"not_{fragment}" not in value
-        and f"non_{fragment}" not in value
+        and re.search(
+            rf"(?:^|_)(?:not(?:_(?:yet|currently))?|non)_{re.escape(fragment)}",
+            value,
+        )
+        is None
         for fragment in fragments
     )
 
