@@ -56,8 +56,9 @@ def build(label: str | None = None, output_dir: Path | None = None) -> Path:
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
         for source in archive_files():
             relative = source.relative_to(COMPONENT)
-            target = Path("wait_for_wolt") / relative
-            info = zipfile.ZipInfo(target.as_posix(), timestamp)
+            # HACS extracts zip_release assets into the integration's domain
+            # directory, so component files must be at the archive root.
+            info = zipfile.ZipInfo(relative.as_posix(), timestamp)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = (stat.S_IFREG | 0o644) << 16
             bundle.writestr(info, source.read_bytes())

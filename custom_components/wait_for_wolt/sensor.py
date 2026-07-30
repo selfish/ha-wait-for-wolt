@@ -71,7 +71,7 @@ def _contains_non_negated_status(value: str, *fragments: str) -> bool:
     return any(
         fragment in value
         and re.search(
-            rf"(?:^|_)(?:not(?:_(?:yet|currently))?|non)_{re.escape(fragment)}",
+            rf"(?:^|_)(?:(?:not(?:_(?:yet|currently))?|non)_|un){re.escape(fragment)}",
             value,
         )
         is None

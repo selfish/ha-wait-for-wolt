@@ -185,6 +185,29 @@ async def test_active_orders_treats_legacy_top_level_status_as_authoritative(
 
 
 @pytest.mark.parametrize(
+    ("status", "expected_active"),
+    [
+        ("Delivered", False),
+        ("not delivered", True),
+        ("not yet delivered", True),
+        ("undelivered", True),
+        ("delivery not yet completed", True),
+        ("cancelled", False),
+        ("not currently cancelled", True),
+    ],
+)
+async def test_legacy_status_fallback_respects_negation(
+    status: str, expected_active: bool
+) -> None:
+    """Do not drop telemetry-less active orders because a final word is negated."""
+    order = {"order_id": "legacy-order", "status": {"value": status}}
+    session = FakeSession(FakeResponse(200, {"orders": [order]}))
+
+    expected = [order] if expected_active else []
+    assert await make_api(session).fetch_active_orders() == expected
+
+
+@pytest.mark.parametrize(
     ("method_name", "payload", "args"),
     [
         ("fetch_active_orders", {"orders": {"unexpected": "shape"}}, ()),

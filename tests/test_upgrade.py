@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.wait_for_wolt.api import WoltApi, WoltAuthenticationError
 from custom_components.wait_for_wolt.const import (
     CONF_BEARER_TOKEN,
+    CONF_CLIENT_ID,
     CONF_REFRESH_TOKEN,
     CONF_SESSION_ID,
     CONF_VENUE_IDS,
@@ -61,6 +62,7 @@ async def test_reauth_validates_then_recovers_to_loaded(
         assert not await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         assert entry.state is ConfigEntryState.SETUP_ERROR
+        stable_client_id = entry.data[CONF_CLIENT_ID]
 
         flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
         assert len(flows) == 1
@@ -78,6 +80,7 @@ async def test_reauth_validates_then_recovers_to_loaded(
 
     assert entry.state is ConfigEntryState.LOADED
     assert entry.data[CONF_REFRESH_TOKEN] == "synthetic-replacement-refresh-not-valid"
+    assert entry.data[CONF_CLIENT_ID] == stable_client_id
     assert fetch_orders.await_count == 3
 
 

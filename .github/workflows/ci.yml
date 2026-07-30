@@ -75,7 +75,12 @@ jobs:
       - name: Select Home Assistant runtime
         run: uv pip install --no-deps "homeassistant==${{ matrix.homeassistant }}"
       - name: Test exact runtime
-        run: uv run pytest
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(uv run --no-sync python -c 'from importlib.metadata import version; print(version("homeassistant"))')"
+          test "${actual}" = "${{ matrix.homeassistant }}"
+          uv run --no-sync pytest
 
   hassfest:
     name: Hassfest

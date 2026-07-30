@@ -15,7 +15,7 @@ The first beta is a canonical rewrite of several unreleased local and commit-bas
 
 - The old mixed order sensor becomes a normalized enum status sensor; ETA is a separate timestamp sensor. Automations that compared duration text must be updated.
 - Raw item, payment, address, order-history, and tracking payload attributes are removed.
-- The one captured web-client identifier formerly shipped to every installation is replaced by a random per-runtime identifier.
+- The one captured web-client identifier formerly shipped to every installation is replaced by a random identifier persisted per config entry.
 - Setup and reauthentication validate credentials before saving them. A refresh token can bootstrap the access token.
 
 ## Explicitly deferred experimental behavior

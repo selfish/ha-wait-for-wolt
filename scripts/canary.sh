@@ -17,26 +17,34 @@ cleanup() {
 trap cleanup EXIT
 
 cd "${ROOT}"
+if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+  echo "Canary requires a clean checkout so artifact metadata binds exact source" >&2
+  exit 2
+fi
 VERSION="$(uv run python scripts/check_version.py)"
-if [[ -n "${CANARY_ARCHIVE:-}" || -n "${CANARY_CHECKSUM:-}" ]]; then
-  if [[ ! -f "${CANARY_ARCHIVE:-}" || ! -f "${CANARY_CHECKSUM:-}" ]]; then
-    echo "CANARY_ARCHIVE and CANARY_CHECKSUM must both name readable files" >&2
+EXPECTED_COMMIT="${CANARY_EXPECTED_COMMIT:-$(git rev-parse HEAD)}"
+if [[ -n "${CANARY_ARCHIVE:-}" || -n "${CANARY_CHECKSUM:-}" || -n "${CANARY_METADATA:-}" ]]; then
+  if [[ ! -f "${CANARY_ARCHIVE:-}" || ! -f "${CANARY_CHECKSUM:-}" || ! -f "${CANARY_METADATA:-}" ]]; then
+    echo "CANARY_ARCHIVE, CANARY_CHECKSUM, and CANARY_METADATA must all name readable files" >&2
     exit 2
   fi
   cp "${CANARY_ARCHIVE}" "${WORK}/wait_for_wolt.zip"
   cp "${CANARY_CHECKSUM}" "${WORK}/wait_for_wolt.sha256"
+  cp "${CANARY_METADATA}" "${WORK}/artifact.metadata"
 else
   SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
     uv run python scripts/build_release.py --label canary --output-dir "${WORK}"
+  printf 'commit=%s\n' "${EXPECTED_COMMIT}" > "${WORK}/artifact.metadata"
 fi
 (
   cd "${WORK}"
   sha256sum -c wait_for_wolt.sha256
+  grep -Fx "commit=${EXPECTED_COMMIT}" artifact.metadata
 )
-mkdir -p "${WORK}/config/custom_components"
+mkdir -p "${WORK}/config/custom_components/wait_for_wolt"
 python -m zipfile -e \
   "${WORK}/wait_for_wolt.zip" \
-  "${WORK}/config/custom_components"
+  "${WORK}/config/custom_components/wait_for_wolt"
 cat > "${WORK}/config/configuration.yaml" <<'YAML'
 homeassistant:
   name: Wait for Wolt Canary

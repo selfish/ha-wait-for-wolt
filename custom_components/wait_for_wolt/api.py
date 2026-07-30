@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -52,10 +53,17 @@ def is_active_order(order: dict[str, Any]) -> bool:
         status = status.get("value") or status.get("text") or status.get("label")
     if not isinstance(status, str) or not status:
         return False
-    return not any(
-        final_word in status.lower()
-        for final_word in ("delivered", "cancel", "failed", "refunded", "rejected")
-    )
+    value = re.sub(r"[^a-z0-9]+", "_", status.casefold()).strip("_")
+    for final_word in ("delivered", "cancel", "failed", "refunded", "rejected"):
+        if final_word not in value:
+            continue
+        negated = re.search(
+            rf"(?:^|_)(?:(?:not(?:_(?:yet|currently))?|non)_|un){re.escape(final_word)}",
+            value,
+        )
+        if negated is None:
+            return False
+    return True
 
 
 class WoltApiError(Exception):

@@ -33,7 +33,7 @@ def test_hacs_uses_the_fixed_release_asset() -> None:
 
 
 def test_release_archive_is_clean_and_checksum_matches(tmp_path: Path) -> None:
-    """Package only the integration under the HACS-compatible directory root."""
+    """Package component files at HACS's integration extraction root."""
     archive = build("test", tmp_path)
     checksum, filename = archive.with_suffix(".sha256").read_text().split()
 
@@ -48,6 +48,8 @@ def test_release_archive_is_clean_and_checksum_matches(tmp_path: Path) -> None:
     assert hacs_archive.read_bytes() == archive.read_bytes()
     with zipfile.ZipFile(archive) as bundle:
         names = bundle.namelist()
-    assert "wait_for_wolt/manifest.json" in names
-    assert all(name.startswith("wait_for_wolt/") for name in names)
+    assert "manifest.json" in names
+    assert "__init__.py" in names
+    assert "brand/icon.png" in names
+    assert not any(name.startswith("wait_for_wolt/") for name in names)
     assert not any("__pycache__" in name or name.endswith(".pyc") for name in names)

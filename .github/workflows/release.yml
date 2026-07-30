@@ -44,7 +44,9 @@ jobs:
           set -euo pipefail
           for version in 2026.7.0 2026.7.4; do
             uv pip install --no-deps "homeassistant==${version}"
-            uv run pytest
+            actual="$(uv run --no-sync python -c 'from importlib.metadata import version; print(version("homeassistant"))')"
+            test "${actual}" = "${version}"
+            uv run --no-sync pytest
           done
       - name: Scan for committed secrets
         shell: bash

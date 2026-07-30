@@ -16,17 +16,22 @@ No production installation is the first consumer of a release artifact.
 Set `HA_IMAGE` to repeat against another supported Home Assistant image.
 
 To test downloaded CI or GitHub release assets instead of rebuilding locally, pass
-both fixed-name files:
+the fixed-name archive/checksum and its commit metadata:
 
 ```bash
 CANARY_ARCHIVE=/path/to/wait_for_wolt.zip \
 CANARY_CHECKSUM=/path/to/wait_for_wolt.sha256 \
+CANARY_METADATA=/path/to/wait_for_wolt-COMMIT.metadata \
 HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.7.4 \
 scripts/canary.sh
 ```
 
-The checksum must refer to `wait_for_wolt.zip`. This is also the filename HACS
-downloads because `hacs.json` declares the fixed release asset.
+The checksum must refer to `wait_for_wolt.zip`, and the metadata must contain the
+current checkout's exact `commit=<SHA>` line. Set `CANARY_EXPECTED_COMMIT` only
+when deliberately validating against another immutable checkout. HACS extracts
+the fixed archive into `/config/custom_components/wait_for_wolt`, so the canary
+uses that same extraction root. The script refuses a dirty checkout so its source,
+reported version, and metadata cannot silently refer to different commits.
 
 ## Operational canary
 
