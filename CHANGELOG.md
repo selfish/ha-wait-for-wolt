@@ -2,7 +2,9 @@
 
 All notable changes to Wait for Wolt will be documented here.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Release numbers follow semantic major/minor/patch intent; prereleases use PEP 440
+spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 
 ## [Unreleased]
 
