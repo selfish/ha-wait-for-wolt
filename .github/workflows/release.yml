@@ -38,6 +38,14 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
           uv run pytest
+      - name: Test declared and current Home Assistant versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for version in 2026.7.0 2026.7.4; do
+            uv pip install --no-deps "homeassistant==${version}"
+            uv run pytest
+          done
       - name: Scan for committed secrets
         shell: bash
         run: |
