@@ -10,6 +10,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.wait_for_wolt.const import (
     CONF_BEARER_TOKEN,
+    CONF_CLIENT_ID,
     CONF_REFRESH_TOKEN,
     CONF_SESSION_ID,
     CONF_VENUE_IDS,
@@ -34,6 +35,7 @@ async def test_diagnostics_expose_counts_without_credentials_or_order_pii(
             CONF_NAME: "Private account name",
             CONF_SESSION_ID: "private-session-id",
             CONF_BEARER_TOKEN: "private-access-token",
+            CONF_CLIENT_ID: "private-client-id",
             CONF_REFRESH_TOKEN: "private-refresh-token",
         },
         options={CONF_VENUE_IDS: ["private-venue-slug"]},
@@ -65,6 +67,7 @@ async def test_diagnostics_expose_counts_without_credentials_or_order_pii(
         "Private account name",
         "private-session-id",
         "private-access-token",
+        "private-client-id",
         "private-refresh-token",
         "private-venue-slug",
         "private-purchase-id",

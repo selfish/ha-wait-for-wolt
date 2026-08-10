@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import quote
@@ -13,6 +15,7 @@ import aiohttp
 from .const import (
     ACTIVE_ORDERS_URL,
     HEADERS,
+    ORDER_DETAILS_PATH_URL,
     ORDER_DETAILS_URL,
     REFRESH_URL,
     VENUE_CONTENT_URL,
@@ -50,10 +53,17 @@ def is_active_order(order: dict[str, Any]) -> bool:
         status = status.get("value") or status.get("text") or status.get("label")
     if not isinstance(status, str) or not status:
         return False
-    return not any(
-        final_word in status.lower()
-        for final_word in ("delivered", "cancel", "failed", "refunded", "rejected")
-    )
+    value = re.sub(r"[^a-z0-9]+", "_", status.casefold()).strip("_")
+    for final_word in ("delivered", "cancel", "failed", "refunded", "rejected"):
+        if final_word not in value:
+            continue
+        negated = re.search(
+            rf"(?:^|_)(?:(?:not(?:_(?:yet|currently))?|non)_|un){re.escape(final_word)}",
+            value,
+        )
+        if negated is None:
+            return False
+    return True
 
 
 class WoltApiError(Exception):
@@ -94,6 +104,7 @@ class WoltApi:
         access_token: str,
         refresh_token: str,
         *,
+        client_id: str | None = None,
         token_update_callback: TokenUpdateCallback | None = None,
     ) -> None:
         self._session = session
@@ -102,6 +113,7 @@ class WoltApi:
         self._refresh_token = refresh_token
         self._token_update_callback = token_update_callback
         self._refresh_lock = asyncio.Lock()
+        self._web_client_id = client_id or str(uuid.uuid4())
 
     @property
     def access_token(self) -> str:
@@ -116,6 +128,7 @@ class WoltApi:
     def _headers(self, *, authenticated: bool) -> dict[str, str]:
         """Build fresh request headers without mutating shared constants."""
         headers = dict(HEADERS)
+        headers["x-wolt-web-clientid"] = self._web_client_id
         if authenticated:
             headers["authorization"] = f"Bearer {self._access_token}"
             if self._session_id:
@@ -208,6 +221,12 @@ class WoltApi:
 
     async def _request(self, method: str, url: str, *, auth: bool = True) -> Any:
         """Request JSON, refreshing and retrying once only after an initial 401."""
+        if auth and not self._access_token:
+            async with self._refresh_lock:
+                if not self._access_token:
+                    await self._refresh_access_token()
+            return await self._perform_request(method, url, authenticated=True)
+
         rejected_access_token = self._access_token
         try:
             return await self._perform_request(
@@ -240,9 +259,13 @@ class WoltApi:
 
     async def fetch_order_details(self, purchase_id: str) -> dict[str, Any]:
         """Fetch rich purchase-tracking details for an order."""
-        data = await self._request(
-            "GET", ORDER_DETAILS_URL.format(quote(purchase_id, safe=""))
-        )
+        quoted_id = quote(purchase_id, safe="")
+        try:
+            data = await self._request("GET", ORDER_DETAILS_URL.format(quoted_id))
+        except WoltConnectionError as err:
+            if err.status not in (404, 405):
+                raise
+            data = await self._request("GET", ORDER_DETAILS_PATH_URL.format(quoted_id))
         if not isinstance(data, dict):
             raise WoltInvalidPayloadError("Wolt order details payload is invalid")
         details = data.get("order_details")

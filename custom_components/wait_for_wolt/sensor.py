@@ -66,6 +66,19 @@ ORDER_ETA_DESCRIPTION = SensorEntityDescription(
 )
 
 
+def _contains_non_negated_status(value: str, *fragments: str) -> bool:
+    """Match fragments without treating negative status phrases as that state."""
+    return any(
+        fragment in value
+        and re.search(
+            rf"(?:^|_)(?:(?:not(?:_(?:yet|currently))?|non)_|un){re.escape(fragment)}",
+            value,
+        )
+        is None
+        for fragment in fragments
+    )
+
+
 def _raw_status(order: dict[str, Any]) -> str | None:
     """Extract a scalar status while respecting authoritative telemetry."""
     status_type: Any = None
@@ -90,17 +103,15 @@ def _raw_status(order: dict[str, Any]) -> str | None:
         display_status = re.sub(r"[^a-z0-9]+", "_", str(status).strip().lower()).strip(
             "_"
         )
-        if any(
-            token in display_status
-            for token in (
-                "delivered",
-                "completed",
-                "finished",
-                "cancel",
-                "fail",
-                "reject",
-                "refund",
-            )
+        if _contains_non_negated_status(
+            display_status,
+            "delivered",
+            "completed",
+            "finished",
+            "cancel",
+            "fail",
+            "reject",
+            "refund",
         ):
             return str(status_type)
     return str(status) if status is not None else None
@@ -112,30 +123,30 @@ def normalize_order_status(order: dict[str, Any]) -> str:
     if not raw:
         return "unknown"
     value = re.sub(r"[^a-z0-9]+", "_", raw.casefold()).strip("_")
-    if any(token in value for token in ("cancel", "refunded")):
+    if _contains_non_negated_status(value, "cancel", "refunded"):
         return "cancelled"
-    if any(token in value for token in ("fail", "reject", "declin")):
+    if _contains_non_negated_status(value, "fail", "reject", "declin"):
         return "failed"
-    if any(token in value for token in ("delivered", "completed", "finished")):
+    if _contains_non_negated_status(value, "delivered", "completed", "finished"):
         return "delivered"
-    if any(token in value for token in ("arriv", "nearby", "almost_there")):
+    if _contains_non_negated_status(value, "arriv", "nearby", "almost_there"):
         return "arriving"
-    if any(
-        token in value
-        for token in ("on_the_way", "en_route", "courier_delivery", "delivery")
+    if _contains_non_negated_status(
+        value, "picked_up", "courier_pickup", "delivery_pickup"
     ):
-        return "on_the_way"
-    if any(token in value for token in ("picked_up", "courier_pickup")):
         return "picked_up"
-    if any(token in value for token in ("ready", "awaiting_pickup")):
+    if _contains_non_negated_status(value, "ready", "awaiting_pickup"):
         return "ready_for_pickup"
-    if any(token in value for token in ("prepar", "production", "restaurant")):
+    if _contains_non_negated_status(value, "prepar", "production", "restaurant"):
         return "preparing"
-    if any(
-        token in value
-        for token in ("pending", "received", "created", "in_progress", "accepted")
+    if _contains_non_negated_status(
+        value, "pending", "received", "created", "in_progress", "accepted"
     ):
         return "pending"
+    if _contains_non_negated_status(
+        value, "on_the_way", "en_route", "courier_delivery", "delivery"
+    ):
+        return "on_the_way"
     return "unknown"
 
 
@@ -221,8 +232,28 @@ async def async_setup_entry(
     name = data.get(CONF_NAME, DEFAULT_NAME)
     venues = data.get(CONF_VENUE_IDS, [])
     if venues:
+        registry = er.async_get(hass)
+        for slug in venues:
+            scoped_unique_id = _venue_unique_id(entry.entry_id, slug)
+            legacy_entity = _owned_registry_entity(
+                registry,
+                entry.entry_id,
+                f"wolt_venue_{slug}",
+            )
+            if (
+                legacy_entity is not None
+                and registry.async_get_entity_id("sensor", DOMAIN, scoped_unique_id)
+                is None
+            ):
+                registry.async_update_entity(
+                    legacy_entity.entity_id,
+                    new_unique_id=scoped_unique_id,
+                )
         async_add_entities(
-            [WoltVenueSensor(api, slug, f"{name} {slug}") for slug in venues],
+            [
+                WoltVenueSensor(api, entry.entry_id, slug, f"{name} {slug}")
+                for slug in venues
+            ],
             update_before_add=True,
         )
 
@@ -297,6 +328,11 @@ def _owned_registry_entity(
 def _order_unique_id(entry_id: str, order_id: str, key: str) -> str:
     """Scope purchase entities to one config entry."""
     return f"{entry_id}_{order_id}_{key}"
+
+
+def _venue_unique_id(entry_id: str, slug: str) -> str:
+    """Scope venue entities to one config entry."""
+    return f"{entry_id}_venue_{slug}"
 
 
 class WoltOrderEntity(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEntity):
@@ -391,11 +427,11 @@ class WoltVenueSensor(SensorEntity):
 
     _attr_attribution = "Data provided by Wolt"
 
-    def __init__(self, api: WoltApi, slug: str, name: str) -> None:
+    def __init__(self, api: WoltApi, entry_id: str, slug: str, name: str) -> None:
         self.api = api
         self.slug = slug
         self._attr_name = name
-        self._attr_unique_id = f"wolt_venue_{slug}"
+        self._attr_unique_id = _venue_unique_id(entry_id, slug)
         self._state = None
         self._attr_extra_state_attributes = {}
         self._attr_available = False

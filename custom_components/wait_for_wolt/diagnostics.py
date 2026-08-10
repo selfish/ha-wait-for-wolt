@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_BEARER_TOKEN,
+    CONF_CLIENT_ID,
     CONF_REFRESH_TOKEN,
     CONF_SESSION_ID,
     CONF_VENUE_IDS,
@@ -20,6 +21,7 @@ TO_REDACT = {
     CONF_NAME,
     CONF_SESSION_ID,
     CONF_BEARER_TOKEN,
+    CONF_CLIENT_ID,
     CONF_REFRESH_TOKEN,
     CONF_VENUE_IDS,
 }

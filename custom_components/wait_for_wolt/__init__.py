@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import homeassistant.helpers.config_validation as cv
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -12,6 +14,7 @@ from homeassistant.helpers.typing import ConfigType
 from .api import WoltApi
 from .const import (
     CONF_BEARER_TOKEN,
+    CONF_CLIENT_ID,
     CONF_REFRESH_TOKEN,
     CONF_SESSION_ID,
     DOMAIN,
@@ -34,6 +37,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Create the shared client/coordinator and set up entry platforms."""
+    if not entry.data.get(CONF_CLIENT_ID):
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_CLIENT_ID: str(uuid.uuid4())},
+        )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = _entry_snapshot(entry)
 
     def persist_tokens(access_token: str, refresh_token: str) -> None:
@@ -54,6 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data.get(CONF_SESSION_ID, ""),
         entry.data[CONF_BEARER_TOKEN],
         entry.data[CONF_REFRESH_TOKEN],
+        client_id=entry.data[CONF_CLIENT_ID],
         token_update_callback=persist_tokens,
     )
     coordinator = WoltDataUpdateCoordinator(hass, entry, api)
