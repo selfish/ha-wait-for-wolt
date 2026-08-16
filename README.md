@@ -127,8 +127,8 @@ opens a reauthentication flow.
 
 ## How it works
 - The integration refreshes the bearer token automatically.
-- One shared coordinator polls every 30 seconds while an order is active and every
-  five minutes while idle. Each authenticated endpoint is fetched at most once per
+- The coordinator polls every 30 seconds while an order is active and every
+  minute while idle. Each authenticated endpoint is fetched at most once per
   cycle, and optional rich tracking failures fall back to the order summary.
 - Each in-progress purchase gets a device with a stable enum status sensor and a
   timestamp ETA sensor. Existing status entities are migrated to config-entry-scoped

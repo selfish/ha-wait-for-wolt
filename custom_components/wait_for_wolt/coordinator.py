@@ -24,7 +24,7 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 ACTIVE_UPDATE_INTERVAL = timedelta(seconds=30)
-IDLE_UPDATE_INTERVAL = timedelta(minutes=5)
+IDLE_UPDATE_INTERVAL = timedelta(minutes=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,11 +75,16 @@ class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
             for order_id in sorted(active_order_ids):
                 try:
                     details[order_id] = await self.api.fetch_order_details(order_id)
-                except WoltAuthenticationError, WoltRateLimitError:
-                    raise
-                except WoltConnectionError, WoltInvalidPayloadError:
+                except (
+                    WoltAuthenticationError,
+                    WoltRateLimitError,
+                    WoltConnectionError,
+                    WoltInvalidPayloadError,
+                ):
                     # The summary remains useful while the optional rich endpoint
-                    # is unavailable or has not populated a newly placed order.
+                    # is unavailable, forbidden, limited, or has not populated a
+                    # newly placed order. Authentication for the primary orders
+                    # endpoint remains authoritative and is handled below.
                     rich_tracking_failed = True
             if rich_tracking_failed and not self._rich_tracking_warning_logged:
                 _LOGGER.warning("Rich Wolt order tracking details are unavailable")

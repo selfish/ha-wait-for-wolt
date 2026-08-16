@@ -81,7 +81,7 @@ async def test_coordinator_fetches_one_shared_active_order_snapshot(
 async def test_coordinator_uses_conservative_idle_interval(
     hass: HomeAssistant,
 ) -> None:
-    """Avoid rich tracking requests and poll slowly when no order is active."""
+    """Avoid rich requests while polling often enough to discover new orders."""
     api = AsyncMock(spec=WoltApi)
     api.fetch_orders.return_value = []
     coordinator = make_coordinator(hass, api)
@@ -97,7 +97,13 @@ async def test_coordinator_uses_conservative_idle_interval(
 
 @pytest.mark.parametrize(
     "error",
-    [WoltConnectionError("not ready", status=404), WoltInvalidPayloadError("changed")],
+    [
+        WoltAuthenticationError("detail rejected", status=401),
+        WoltAuthenticationError("detail forbidden", status=403),
+        WoltRateLimitError("detail limited", status=429),
+        WoltConnectionError("not ready", status=404),
+        WoltInvalidPayloadError("changed"),
+    ],
 )
 async def test_optional_tracking_failure_keeps_order_summary_available(
     hass: HomeAssistant,
@@ -112,12 +118,14 @@ async def test_optional_tracking_failure_keeps_order_summary_available(
     api = AsyncMock(spec=WoltApi)
     api.fetch_orders.return_value = [active]
     api.fetch_order_details.side_effect = error
+    coordinator = make_coordinator(hass, api)
 
-    data = await make_coordinator(hass, api)._async_update_data()
+    data = await coordinator._async_update_data()
 
     assert data.orders == {"purchase-active": active}
     assert data.active_order_ids == frozenset({"purchase-active"})
     assert data.details == {}
+    assert coordinator.update_interval == ACTIVE_UPDATE_INTERVAL
 
 
 async def test_optional_tracking_warning_is_not_repeated_each_active_poll(
@@ -173,7 +181,7 @@ async def test_coordinator_translates_auth_failure_to_reauthentication(
         await make_coordinator(hass, api)._async_update_data()
 
 
-def test_poll_intervals_are_intentionally_conservative() -> None:
-    """Document the active and idle request-volume policy."""
+def test_poll_intervals_discover_new_orders_promptly() -> None:
+    """Bound discovery latency so short orders can trigger automations."""
     assert timedelta(seconds=30) == ACTIVE_UPDATE_INTERVAL
-    assert timedelta(minutes=5) == IDLE_UPDATE_INTERVAL
+    assert timedelta(minutes=1) == IDLE_UPDATE_INTERVAL

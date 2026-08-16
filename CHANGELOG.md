@@ -8,7 +8,7 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 
 ## [Unreleased]
 
-## [0.1.0b1] - 2026-07-30
+## [0.1.0b1] - 2026-08-16
 
 ### Added
 
@@ -24,7 +24,7 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 - Privacy-preserving diagnostics that expose operational counts without order,
   courier, venue, account-name, or credential values.
 - Typed per-purchase status and ETA entities with English and Hebrew UI translations.
-- A local brand icon, deterministic release archive, SHA-256 checksum, and
+- A local Wolt wordmark-derived `W` icon, deterministic release archive, SHA-256 checksum, and
   guarded tag-to-GitHub-Release workflow.
 
 ### Changed
@@ -37,7 +37,7 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
   deprecated as a runtime credential source.
 - The minimum supported Home Assistant version is now 2026.7.0, matching the
   tested Python and Home Assistant environment.
-- Authenticated polling adapts from five minutes while idle to 30 seconds while
+- Authenticated polling adapts from one minute while idle to 30 seconds while
   an order is active; venue polling uses a conservative five-minute interval.
 - Credential inputs are password-masked, and options no longer prefill saved
   access or refresh tokens.
@@ -49,6 +49,11 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
   bootstrap the access token, so the short-lived access token is optional.
 
 ### Fixed
+
+- New orders are discovered within one minute so short-lived orders do not slip
+  between idle polling cycles and miss Home Assistant automations.
+- Optional rich-tracking authentication or rate-limit failures no longer stop
+  the integration after the primary order summary has succeeded.
 
 - Credential-only options edits now reload the running API client.
 - Concurrent unauthorized requests share one serialized token refresh instead
