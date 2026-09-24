@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for version in 2026.7.0 2026.7.4; do
+          for version in 2026.7.0 2026.9.3; do
             uv pip install --no-deps "homeassistant==${version}"
             actual="$(uv run --no-sync python -c 'from importlib.metadata import version; print(version("homeassistant"))')"
             test "${actual}" = "${version}"

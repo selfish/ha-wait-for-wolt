@@ -188,6 +188,10 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             ]
 
             options = {CONF_VENUE_IDS: venue_ids}
+            if "tracking_maps" in user_input:
+                options["tracking_maps"] = user_input["tracking_maps"]
+            elif "tracking_maps" in self.config_entry.options:
+                options["tracking_maps"] = self.config_entry.options["tracking_maps"]
             supplied_access_token = user_input.get(CONF_BEARER_TOKEN, "")
             supplied_refresh_token = user_input.get(CONF_REFRESH_TOKEN, "")
             data = {
@@ -244,6 +248,13 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 vol.Optional(CONF_VENUE_IDS, default=current): TextSelector(
                     {"multiline": True}
                 ),
+                vol.Optional(
+                    "tracking_maps",
+                    default=self.config_entry.options.get(
+                        "tracking_maps",
+                        self.config_entry.data.get("tracking_maps", False),
+                    ),
+                ): bool,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)

@@ -58,7 +58,7 @@ jobs:
       matrix:
         homeassistant:
           - "2026.7.0"
-          - "2026.7.4"
+          - "2026.9.3"
     steps:
       - name: Check out the exact source commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

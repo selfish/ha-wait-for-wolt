@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.7.3}"
+IMAGE="${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.9.3}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/wait-for-wolt-canary.XXXXXX")"
 NAME="wait-for-wolt-canary-$$"
 cleanup() {
@@ -60,7 +60,7 @@ docker run --rm \
   -w /config/custom_components \
   -v "${WORK}/config:/config" \
   "${IMAGE}" \
-  python -c 'import wait_for_wolt, wait_for_wolt.api, wait_for_wolt.config_flow, wait_for_wolt.const, wait_for_wolt.coordinator, wait_for_wolt.diagnostics, wait_for_wolt.sensor'
+  python -c 'import importlib,pathlib; [importlib.import_module("wait_for_wolt" if p.stem == "__init__" else "wait_for_wolt."+p.stem) for p in pathlib.Path("wait_for_wolt").glob("*.py")]'
 
 docker run --rm \
   --name "${NAME}-check" \

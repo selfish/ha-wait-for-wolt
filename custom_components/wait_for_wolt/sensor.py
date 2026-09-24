@@ -155,7 +155,7 @@ def _parse_eta(value: Any) -> datetime | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, dict):
-        for key in ("value", "timestamp", "max", "end"):
+        for key in ("$date", "date", "value", "timestamp", "max", "end"):
             if key in value and (parsed := _parse_eta(value[key])) is not None:
                 return parsed
         return None
@@ -180,6 +180,9 @@ def extract_order_eta(order: dict[str, Any]) -> datetime | None:
     for key in ("delivery_eta", "estimated_delivery_time", "eta"):
         if (parsed := _parse_eta(order.get(key))) is not None:
             return parsed
+    estimate = order.get("client_pre_estimate")
+    if isinstance(estimate, dict):
+        return _parse_eta(estimate.get("delivery_eta"))
     return None
 
 
@@ -258,6 +261,13 @@ async def async_setup_entry(
         )
 
     known_order_ids: set[str] = set()
+    # Retain the production duration/map contracts only for migrated/opted-in
+    # entries. Never turn a duration entity into an enum behind an automation.
+    from .tracking import async_setup_tracking, tracking_enabled
+
+    maps_enabled = tracking_enabled(entry)
+    if maps_enabled:
+        async_setup_tracking(hass, entry, async_add_entities)
 
     @callback
     def async_add_new_orders() -> None:
@@ -293,6 +303,7 @@ async def async_setup_entry(
             )
             if (
                 legacy_entity is not None
+                and not maps_enabled
                 and registry.async_get_entity_id("sensor", DOMAIN, status_unique_id)
                 is None
             ):
@@ -462,6 +473,8 @@ class WoltVenueSensor(SensorEntity):
             is_open = venue.get("online")
         if is_open is None:
             is_open = venue.get("is_open")
+        if venue.get("online") is False:
+            is_open = False
         self._state = "open" if is_open else "closed"
 
         # Extract estimates for available delivery methods

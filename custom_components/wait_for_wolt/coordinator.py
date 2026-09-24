@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from contextlib import suppress
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
@@ -34,6 +35,7 @@ class WoltCoordinatorData:
     orders: dict[str, dict[str, Any]]
     active_order_ids: frozenset[str]
     details: dict[str, dict[str, Any]]
+    pickups: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
@@ -54,6 +56,10 @@ class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
             update_interval=IDLE_UPDATE_INTERVAL,
         )
         self.api = api
+        self.maps_enabled = (
+            entry.options.get("tracking_maps", entry.data.get("tracking_maps", False))
+            is True
+        )
         self._rich_tracking_warning_logged = False
 
     async def _async_update_data(self) -> WoltCoordinatorData:
@@ -69,6 +75,7 @@ class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
                 order_id for order_id, order in orders.items() if is_active_order(order)
             )
             details: dict[str, dict[str, Any]] = {}
+            pickups: dict[str, dict[str, Any]] = {}
             rich_tracking_failed = False
             # Orders are normally singular. Keep requests sequential to avoid bursts
             # against Wolt's unofficial consumer endpoints.
@@ -86,6 +93,11 @@ class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
                     # newly placed order. Authentication for the primary orders
                     # endpoint remains authoritative and is handled below.
                     rich_tracking_failed = True
+                if self.maps_enabled:
+                    with suppress(WoltConnectionError, WoltInvalidPayloadError):
+                        pickups[order_id] = await self.api.fetch_venue_location(
+                            orders[order_id]
+                        )
             if rich_tracking_failed and not self._rich_tracking_warning_logged:
                 _LOGGER.warning("Rich Wolt order tracking details are unavailable")
             self._rich_tracking_warning_logged = rich_tracking_failed
@@ -99,7 +111,7 @@ class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
         self.update_interval = (
             ACTIVE_UPDATE_INTERVAL if active_order_ids else IDLE_UPDATE_INTERVAL
         )
-        return WoltCoordinatorData(orders, active_order_ids, details)
+        return WoltCoordinatorData(orders, active_order_ids, details, pickups)
 
     @staticmethod
     def order_id(order: dict[str, Any]) -> str | None:
