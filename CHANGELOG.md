@@ -8,9 +8,15 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 
 ## [Unreleased]
 
-## [0.1.0b1] - 2026-08-16
+## [0.1.0b1] - 2026-09-25
 
 ### Added
+
+- Typed delivery-minute compatibility sensors, opt-in courier/pickup locations,
+  and an explicitly labeled optional Home destination reference.
+- Per-entity, per-order legacy location consent; disabled-state preservation.
+- Adversarial migration, privacy, terminal cleanup and multi-entry tests.
+- Fully resolved HA 2026.7.0 and 2026.9.3 test environments.
 
 - Offline Home Assistant tests with synthetic fixtures.
 - Ruff, locked Python tooling, Hassfest, HACS validation, Dependabot, and exact-commit review packages.
@@ -78,8 +84,11 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
   venue labels.
 - Loaded-entry reauthentication now schedules exactly one reload instead of
   duplicating the immediate post-credential-update polling cycle.
-- Existing order status entities migrate to the scoped identity without losing
-  entity-registry customizations.
+- Existing delivery/minutes entities migrate to scoped delivery identities without
+  becoming status sensors or losing registry customizations.
+- Terminal summaries always win over stale rich details, and optional tracking
+  failures back off without breaking summary entities.
+- Fixed-name HACS release ZIP and checksums make tagged releases installable.
 
 ### Security
 

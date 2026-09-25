@@ -6,6 +6,7 @@ import logging
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import timedelta
+from time import monotonic
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryAuthFailed
@@ -21,6 +22,7 @@ from .api import (
     is_active_order,
 )
 from .const import DOMAIN
+from .privacy import location_enabled
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,10 +58,8 @@ class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
             update_interval=IDLE_UPDATE_INTERVAL,
         )
         self.api = api
-        self.maps_enabled = (
-            entry.options.get("tracking_maps", entry.data.get("tracking_maps", False))
-            is True
-        )
+        self.entry = entry
+        self._rich_retry: dict[str, tuple[float, int]] = {}
         self._rich_tracking_warning_logged = False
 
     async def _async_update_data(self) -> WoltCoordinatorData:
@@ -79,9 +79,19 @@ class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
             rich_tracking_failed = False
             # Orders are normally singular. Keep requests sequential to avoid bursts
             # against Wolt's unofficial consumer endpoints.
+            self._rich_retry = {
+                key: value
+                for key, value in self._rich_retry.items()
+                if key in active_order_ids
+            }
             for order_id in sorted(active_order_ids):
                 try:
-                    details[order_id] = await self.api.fetch_order_details(order_id)
+                    retry_at, failures = self._rich_retry.get(order_id, (0, 0))
+                    if monotonic() < retry_at:
+                        rich_tracking_failed = True
+                    else:
+                        details[order_id] = await self.api.fetch_order_details(order_id)
+                        self._rich_retry.pop(order_id, None)
                 except (
                     WoltAuthenticationError,
                     WoltRateLimitError,
@@ -93,7 +103,11 @@ class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
                     # newly placed order. Authentication for the primary orders
                     # endpoint remains authoritative and is handled below.
                     rich_tracking_failed = True
-                if self.maps_enabled:
+                    self._rich_retry[order_id] = (
+                        monotonic() + min(60 * 2 ** min(failures, 4), 900),
+                        failures + 1,
+                    )
+                if location_enabled(self.hass, self.entry, order_id, "pickup"):
                     with suppress(WoltConnectionError, WoltInvalidPayloadError):
                         pickups[order_id] = await self.api.fetch_venue_location(
                             orders[order_id]

@@ -22,8 +22,21 @@ web API, which may change without notice.
   estimates when Wolt provides them.
 - Conservative shared polling and privacy-preserving diagnostics.
 
-Live courier maps, route points, spending history, and websocket updates are not
-part of the current release-ready feature set.
+- A typed **delivery minutes** sensor for each active order, retaining legacy
+  automation targets rather than converting them into text status sensors.
+- Opt-in courier and pickup locations, refreshed through the shared coordinator.
+
+Location history is sensitive. Under **Configure**, enable locations only if you
+want them stored in Home Assistant history. Existing locations are grandfathered
+only for their original order; a future order requires explicit opt-in. Disabled
+entities remain disabled. Exclude location sensors from Recorder if you do not want
+a permanent history.
+
+The optional **Home destination reference** is your `zone.home`, explicitly marked
+`coordinate_source: home_reference`—not a verified Wolt dropoff address. Leave it
+off for deliveries elsewhere. Courier positions depend on Wolt returning them;
+this is 30-second polling, not websocket-level tracking. Spending history and
+websocket updates are deliberately excluded.
 
 ## Installation via HACS
 Requires Home Assistant 2026.7.0 or newer.
@@ -129,10 +142,13 @@ opens a reauthentication flow.
 - The integration refreshes the bearer token automatically.
 - The coordinator polls every 30 seconds while an order is active and every
   minute while idle. Each authenticated endpoint is fetched at most once per
-  cycle, and optional rich tracking failures fall back to the order summary.
+  cycle. Optional rich tracking failures fall back to the order summary and retry
+  with bounded exponential backoff. Completed, cancelled, malformed-status, and
+  vanished orders clear arrival flags, ETA, minutes and courier coordinates.
 - Each in-progress purchase gets a device with a stable enum status sensor and a
-  timestamp ETA sensor. Existing status entities are migrated to config-entry-scoped
-  unique IDs. Order identifiers, venue labels, item lists, payment values, addresses,
+  timestamp ETA sensor, plus a numeric delivery-minutes sensor. Legacy `wolt_<id>`
+  identities migrate to delivery/minutes, never status. New unique IDs are scoped
+  to the config entry. Order identifiers, venue labels, item lists, payment values, addresses,
   and raw API payloads are intentionally not exposed in user-facing device names or
   entity attributes.
 - New orders placed while Home Assistant is running are discovered automatically within the polling interval.

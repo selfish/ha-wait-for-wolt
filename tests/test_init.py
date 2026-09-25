@@ -99,7 +99,7 @@ async def test_config_entry_setup_rotation_reload_and_unload(
         await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.NOT_LOADED
-    cancel_listener.assert_called_once_with()
+    assert cancel_listener.call_count == 2  # status/ETA and compatibility discovery
 
 
 async def test_transient_first_refresh_enters_setup_retry(

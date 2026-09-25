@@ -261,13 +261,9 @@ async def async_setup_entry(
         )
 
     known_order_ids: set[str] = set()
-    # Retain the production duration/map contracts only for migrated/opted-in
-    # entries. Never turn a duration entity into an enum behind an automation.
-    from .tracking import async_setup_tracking, tracking_enabled
+    from .tracking import async_setup_tracking
 
-    maps_enabled = tracking_enabled(entry)
-    if maps_enabled:
-        async_setup_tracking(hass, entry, async_add_entities)
+    async_setup_tracking(hass, entry, async_add_entities)
 
     @callback
     def async_add_new_orders() -> None:
@@ -283,6 +279,7 @@ async def async_setup_entry(
                 is not None
                 for unique_id in (
                     f"wolt_{order_id}",
+                    _order_unique_id(entry.entry_id, order_id, "delivery"),
                     _order_unique_id(entry.entry_id, order_id, "status"),
                     _order_unique_id(entry.entry_id, order_id, "eta"),
                 )
@@ -295,24 +292,6 @@ async def async_setup_entry(
         known_order_ids.update(new_order_ids)
         entities: list[SensorEntity] = []
         for order_id in sorted(new_order_ids):
-            status_unique_id = _order_unique_id(entry.entry_id, order_id, "status")
-            legacy_entity = _owned_registry_entity(
-                registry,
-                entry.entry_id,
-                f"wolt_{order_id}",
-            )
-            if (
-                legacy_entity is not None
-                and not maps_enabled
-                and registry.async_get_entity_id("sensor", DOMAIN, status_unique_id)
-                is None
-            ):
-                registry.async_update_entity(
-                    legacy_entity.entity_id,
-                    new_unique_id=status_unique_id,
-                    translation_key="order_status",
-                    has_entity_name=True,
-                )
             entities.extend(
                 (
                     WoltOrderStatusSensor(coordinator, entry.entry_id, order_id),
@@ -370,10 +349,9 @@ class WoltOrderEntity(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEntity
     @property
     def _order_data(self) -> dict[str, Any]:
         """Merge the order summary with richer active tracking details."""
-        return {
-            **self.coordinator.data.orders.get(self.order_id, {}),
-            **self.coordinator.data.details.get(self.order_id, {}),
-        }
+        summary = self.coordinator.data.orders.get(self.order_id, {})
+        details = self.coordinator.data.details.get(self.order_id, {})
+        return {**details, **summary}
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -430,7 +408,13 @@ class WoltOrderEtaSensor(WoltOrderEntity):
     @property
     def native_value(self) -> datetime | None:
         """Return an aware timestamp or unknown when Wolt provides no explicit ETA."""
-        return extract_order_eta(self._order_data)
+        if self.order_id not in self.coordinator.data.active_order_ids:
+            return None
+        from .tracking import driver_fields
+
+        return extract_order_eta(
+            driver_fields(self.coordinator.data.details.get(self.order_id, {}))
+        ) or extract_order_eta(self._order_data)
 
 
 class WoltVenueSensor(SensorEntity):

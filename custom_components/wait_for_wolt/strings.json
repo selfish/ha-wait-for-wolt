@@ -46,7 +46,13 @@
           "session_id": "Session ID (optional)",
           "bearer_token": "Access Token (optional)",
           "refresh_token": "Refresh Token",
-          "venue_ids": "Venue IDs"
+          "venue_ids": "Venue IDs",
+          "tracking_maps": "Enable location attributes for all orders",
+          "destination_home": "Use Home as a destination reference"
+        },
+        "data_description": {
+          "tracking_maps": "Publishes courier/pickup coordinates to Home Assistant history. Off by default; legacy locations are preserved only for their existing order. Turning this off removes location attributes.",
+          "destination_home": "Requires locations enabled. This is your Home zone, not a verified delivery address from Wolt. Leave off for orders sent elsewhere."
         }
       }
     }

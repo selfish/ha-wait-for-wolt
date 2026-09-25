@@ -1,40 +1,48 @@
-# Migration from unreleased installations
+# Upgrading to 0.1.0b1
 
-The first beta is a canonical rewrite of several unreleased local and commit-based builds. Make a Home Assistant backup before upgrading and follow [CANARY.md](CANARY.md).
+Back up the installed component and keep config entries and the entity registry.
+This is the first published beta; older commit-based builds were never releases.
 
-## Preserved behavior
+## Preserved contracts
 
-- Existing YAML credentials are imported into a durable UI config entry.
-- Rotated tokens are stored in the config entry.
-- Legacy order unique IDs (`wolt_<purchase>`) migrate to config-entry-scoped status IDs while preserving entity-registry customizations.
-- Existing scoped final-order entities are restored after restart when Wolt still returns the order summary.
-- Optional venue monitoring remains available.
-- Both observed purchase-tracking URL forms are supported: query parameter first, then a path-form fallback after `404` or `405`.
+- `wolt_<purchase>` stays a **numeric duration in minutes**, migrating to the
+  entry-scoped delivery ID. Its entity ID, custom name and disabled state survive.
+- Status and timestamp ETA have distinct identities. A partial-upgrade collision
+  preserves both delivery registry records rather than overwriting either.
+- Pickup/destination legacy identities remain owned by their original entry.
+- Delivery sensors retain the `sensor.wolt_delivery_` naming prefix for dashboards.
+- New orders appear automatically. Terminal/vanished orders cannot retain minutes,
+  arrival flags or courier coordinates; rich polling stops when an order ends.
+- Existing venue sensors and persisted rotating credentials remain supported.
 
-## Intentional safety changes
+## Privacy and map options
 
-- The old mixed order sensor becomes a normalized enum status sensor; ETA is a separate timestamp sensor. Automations that compared duration text must be updated.
-- Raw item, payment, address, order-history, and tracking payload attributes are removed.
-- The one captured web-client identifier formerly shipped to every installation is replaced by a random identifier persisted per config entry.
-- Setup and reauthentication validate credentials before saving them. A refresh token can bootstrap the access token.
+Delivery minutes do not require location permission. A legacy location authorizes
+only that entity and that order—not unrelated entities, other accounts or future
+orders. Explicitly disabling locations overrides inherited consent.
 
-## Explicitly deferred experimental behavior
+To track locations on future orders, enable **Location attributes** in Configure.
+The destination marker has no inferred coordinates by default. **Home destination
+reference** explicitly supplies `zone.home` with `coordinate_source: home_reference`;
+it is never claimed to be the Wolt delivery address. Do not use it for deliveries
+elsewhere. Consider excluding location entities from Recorder.
 
-The recovered local `0.0.5` component remains rollback evidence, not publication source. These behaviors are deliberately excluded from the first beta:
+Raw orders, addresses, item lists, payments, courier identity and financial history
+are not published. Existing private Recorder history is not automatically purged.
 
-| Recovered behavior | Decision | Reason / safer direction |
-|---|---|---|
-| Consumer-events websocket | Deferred | Current room/auth/event contracts need sanitized evidence plus bounded reconnect, clean unload, and polling fallback tests. Thirty-second active polling remains the correctness path. |
-| Courier coordinates and route points | Deferred | High-frequency location history has recorder/privacy consequences. Any future entity must be opt-in with explicit recorder guidance and no route-history attributes. |
-| Monthly spending | Deferred | Financial/order-history collection is outside delivery automation scope and risks long-lived private history in Home Assistant. Local analytics tools such as `mekedron/wolt-cli` and `wolt-stats` are a better ecosystem fit. |
-| Minutes-to-arrival text | Replaced | An explicit Wolt timestamp becomes a typed ETA sensor. Duration-like values are not guessed into timestamps. |
-| Rich item/payment attributes | Removed | They are unnecessary for arrival automations and unsafe in recorder, diagnostics, and issue reports. |
-| Extra venue scraping | Deferred | Only the current sanitized public venue contract is retained. Fee/estimate redesign waits for stable structured amount/unit fields rather than parsing localized display strings. |
+## Deliberate limits
 
-Deferred entities are not deleted from the Home Assistant entity registry. They may become unavailable after upgrade, allowing a rollback to restore their implementation. Users may remove them manually only after deciding they no longer need rollback compatibility.
+- Courier updates use the shared 30-second poll, not a consumer-events websocket.
+- Optional tracking failure keeps the order summary working and uses backoff.
+- Dropoff events are published only when explicitly reported; none are invented
+  from ETA or distance. Arrival automation should use a valid ETA/minutes fallback.
+- Authentication still needs a browser-derived refresh token; there is no public
+  consumer OAuth flow, and no CAPTCHA bypass or credential scraping is provided.
 
-## Authentication boundary
+## Rollback
 
-Wolt's current web email and phone flows use private endpoints and hCaptcha-protected operations. There is no published consumer OAuth or device flow that Home Assistant can register for. The integration therefore does not collect phone numbers, email addresses, OTPs, passwords, or magic links. It accepts the browser-derived refresh credential and rotates it through Wolt's access-token endpoint.
-
-This boundary should change only if Wolt publishes an authorized consumer flow or a browser-mediated handoff can be implemented without bypassing captcha, exposing credentials, or embedding an unsupported browser runtime in Home Assistant.
+Preserve the preceding component outside `custom_components`. Restore those files
+and restart HA if needed. Never restore stale refresh tokens after rotation. For
+legacy code that understands only old unique IDs, reverse only this entry's ID
+migrations from the private registry backup; do not replace unrelated registry data.
+Do not delete the integration or its entities to troubleshoot an upgrade.

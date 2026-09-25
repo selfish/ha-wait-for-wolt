@@ -22,6 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import WoltDataUpdateCoordinator
+from .privacy import location_allowed
 
 
 def tracking_enabled(entry: ConfigEntry) -> bool:
@@ -99,13 +100,15 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
         entry_id: str,
         order_id: str,
         kind: str,
+        allow_location: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self.order_id = order_id
         self.kind = kind
+        self.allow_location = allow_location
         self._attr_unique_id = f"{entry_id}_{order_id}_{kind}"
         # Prefixes are a public compatibility contract used by existing cards.
-        self._attr_name = f"Wolt {kind} {order_id[-6:]}"
+        self._attr_name = f"Wolt {kind} order"
         self._attr_icon = {
             "delivery": "mdi:moped",
             "pickup": "mdi:store-marker",
@@ -130,7 +133,7 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
         details = (
             self.coordinator.data.details.get(self.order_id, {}) if self.active else {}
         )
-        order = {**summary, **details}
+        order = {**details, **summary}
         # The order list owns the terminal-state discriminator.
         telemetry = summary.get("telemetry")
         status_type = (
@@ -141,7 +144,20 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
         status_type = (
             "IN_PROGRESS"
             if self.active
-            else (str(status_type).upper() if status_type else "UNKNOWN")
+            else (
+                status_type.upper()
+                if isinstance(status_type, str)
+                and status_type.upper()
+                in {
+                    "DELIVERED",
+                    "CANCELLED",
+                    "FAILED",
+                    "REJECTED",
+                    "REFUNDED",
+                    "COMPLETED",
+                }
+                else "UNKNOWN"
+            )
         )
         attrs: dict[str, Any] = {
             "order_status_type": status_type,
@@ -151,6 +167,8 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
         if not self.active:
             return attrs  # Never leave stale coordinates/arrival flags on completion.
         if self.kind != "delivery":
+            if not self.allow_location:
+                return attrs
             if self.kind == "pickup":
                 location = self.coordinator.data.pickups.get(self.order_id, {})
                 attrs.update(
@@ -158,15 +176,18 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
                 )
                 attrs["coordinate_source"] = "wolt_venue_json_ld"
             else:
-                home = self.hass.states.get("zone.home") if self.hass else None
-                if home:
-                    attrs.update(
-                        coordinates(
+                # A home reference is an explicit convenience, not a Wolt dropoff.
+                attrs["coordinate_source"] = "unavailable"
+                if self.coordinator.entry.options.get("destination_home") is True:
+                    home = self.hass.states.get("zone.home")
+                    if home is not None:
+                        coords = coordinates(
                             home.attributes.get("latitude"),
                             home.attributes.get("longitude"),
                         )
-                    )
-                attrs["coordinate_source"] = "zone.home"
+                        attrs.update(coords)
+                        if coords:
+                            attrs["coordinate_source"] = "home_reference"
             attrs["route_point_type"] = self.kind
             return attrs
         driver = driver_fields(details)
@@ -183,10 +204,23 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
                     is_arriving_soon=0 <= remaining.total_seconds() <= 180,
                 )
         attrs.update(
-            {key: value for key, value in driver.items() if key != "delivery_eta"}
+            {
+                key: value
+                for key, value in driver.items()
+                if key != "delivery_eta"
+                and (
+                    self.allow_location
+                    or key not in {"latitude", "longitude", "courier_heading"}
+                )
+            }
         )
-        if details:
-            attrs["tracking_event_type"] = "purchase_tracking"
+        event = details.get("tracking_event_type")
+        if isinstance(event, str) and event in {
+            "purchase_tracking",
+            "dropoff_arrival",
+            "dropoff_started",
+        }:
+            attrs["tracking_event_type"] = event
         return attrs
 
     @property
@@ -206,33 +240,69 @@ def async_setup_tracking(
 ) -> None:
     """Migrate owned legacy identities and discover new orders without polling."""
     coordinator = entry.runtime_data.coordinator
-    known: set[str] = set()
+    known: set[tuple[str, str]] = set()
     registry = er.async_get(hass)
 
     @callback
     def discover() -> None:
         entities: list[SensorEntity] = []
-        for order_id in sorted(coordinator.data.active_order_ids - known):
-            known.add(order_id)
+        order_ids = set(coordinator.data.orders)
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if item.platform != DOMAIN or item.domain != "sensor":
+                continue
+            uid = item.unique_id
             for kind in ("delivery", "pickup", "destination"):
-                entity = WoltTrackingSensor(coordinator, entry.entry_id, order_id, kind)
+                prefix, suffix = f"{entry.entry_id}_", f"_{kind}"
+                if uid.startswith(prefix) and uid.endswith(suffix):
+                    order_ids.add(uid[len(prefix) : -len(suffix)])
+            for prefix in ("wolt_pickup_", "wolt_destination_", "wolt_"):
+                if uid.startswith(prefix) and not uid.startswith("wolt_venue_"):
+                    order_ids.add(uid[len(prefix) :])
+                    break
+        for order_id in sorted(order_ids):
+            for kind in ("delivery", "pickup", "destination"):
+                if (order_id, kind) in known:
+                    continue
+                uid = f"{entry.entry_id}_{order_id}_{kind}"
                 legacy_uid = (
                     f"wolt_{order_id}"
                     if kind == "delivery"
                     else f"wolt_{kind}_{order_id}"
                 )
-                legacy_id = registry.async_get_entity_id("sensor", DOMAIN, legacy_uid)
-                old = registry.async_get(legacy_id) if legacy_id else None
-                if (
-                    old
-                    and old.config_entry_id == entry.entry_id
-                    and registry.async_get_entity_id("sensor", DOMAIN, entity.unique_id)
-                    is None
-                ):
-                    registry.async_update_entity(
-                        old.entity_id, new_unique_id=entity.unique_id
+
+                def owned(unique_id):
+                    entity_id = registry.async_get_entity_id(
+                        "sensor", DOMAIN, unique_id
                     )
+                    item = registry.async_get(entity_id) if entity_id else None
+                    return (
+                        item
+                        if item and item.config_entry_id == entry.entry_id
+                        else None
+                    )
+
+                old, current = owned(legacy_uid), owned(uid)
+                active = order_id in coordinator.data.active_order_ids
+                allowed = location_allowed(entry, order_id, kind)
+                if not (old or current or (active and (kind == "delivery" or allowed))):
+                    continue
+                # Preserve both registry records if destination already exists.
+                # Never steal another entry's identity or change disabled state.
+                if old and registry.async_get_entity_id("sensor", DOMAIN, uid) is None:
+                    registry.async_update_entity(old.entity_id, new_unique_id=uid)
+                entity = WoltTrackingSensor(
+                    coordinator, entry.entry_id, order_id, kind, allowed
+                )
+                known.add((order_id, kind))
                 entities.append(entity)
+                if old and current:
+                    # An earlier partial upgrade created both IDs. Keep the legacy
+                    # automation target alive too, without stealing either record.
+                    alias = WoltTrackingSensor(
+                        coordinator, entry.entry_id, order_id, kind, allowed
+                    )
+                    alias._attr_unique_id = legacy_uid
+                    entities.append(alias)
         if entities:
             async_add_entities(entities)
 

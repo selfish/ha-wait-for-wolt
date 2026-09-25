@@ -8,7 +8,6 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
@@ -38,23 +37,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Create the shared client/coordinator and set up entry platforms."""
-    # One-time compatibility migration: preserve existing household map/arrival
-    # automations. New installs remain private by default. Explicit false wins.
-    if "tracking_maps" not in entry.data and "tracking_maps" not in entry.options:
-        legacy = any(
-            item.platform == DOMAIN
-            and (
-                item.unique_id.startswith(("wolt_pickup_", "wolt_destination_"))
-                or item.entity_id.startswith("sensor.wolt_delivery_")
-            )
-            for item in er.async_entries_for_config_entry(
-                er.async_get(hass), entry.entry_id
-            )
-        )
-        if legacy:
-            hass.config_entries.async_update_entry(
-                entry, data={**entry.data, "tracking_maps": True}
-            )
+    from .privacy import migrate_location_consent
+
+    migrate_location_consent(hass, entry)
     if not entry.data.get(CONF_CLIENT_ID):
         hass.config_entries.async_update_entry(
             entry,

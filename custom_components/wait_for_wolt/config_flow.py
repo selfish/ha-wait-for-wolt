@@ -188,6 +188,10 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             ]
 
             options = {CONF_VENUE_IDS: venue_ids}
+            options["destination_home"] = user_input.get(
+                "destination_home",
+                self.config_entry.options.get("destination_home", False),
+            )
             if "tracking_maps" in user_input:
                 options["tracking_maps"] = user_input["tracking_maps"]
             elif "tracking_maps" in self.config_entry.options:
@@ -248,6 +252,10 @@ class WoltOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 vol.Optional(CONF_VENUE_IDS, default=current): TextSelector(
                     {"multiline": True}
                 ),
+                vol.Optional(
+                    "destination_home",
+                    default=self.config_entry.options.get("destination_home", False),
+                ): bool,
                 vol.Optional(
                     "tracking_maps",
                     default=self.config_entry.options.get(

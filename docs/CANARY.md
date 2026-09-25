@@ -22,7 +22,7 @@ the fixed-name archive/checksum and its commit metadata:
 CANARY_ARCHIVE=/path/to/wait_for_wolt.zip \
 CANARY_CHECKSUM=/path/to/wait_for_wolt.sha256 \
 CANARY_METADATA=/path/to/wait_for_wolt-COMMIT.metadata \
-HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.7.4 \
+HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.7.0 \
 scripts/canary.sh
 ```
 

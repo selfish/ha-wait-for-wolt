@@ -21,7 +21,7 @@ if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
   echo "Canary requires a clean checkout so artifact metadata binds exact source" >&2
   exit 2
 fi
-VERSION="$(uv run python scripts/check_version.py)"
+VERSION="$(uv run --no-sync python scripts/check_version.py)"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
 if [[ -n "${CANARY_ARCHIVE:-}" || -n "${CANARY_CHECKSUM:-}" || -n "${CANARY_METADATA:-}" ]]; then
   if [[ ! -f "${CANARY_ARCHIVE:-}" || ! -f "${CANARY_CHECKSUM:-}" || ! -f "${CANARY_METADATA:-}" ]]; then
@@ -45,6 +45,8 @@ mkdir -p "${WORK}/config/custom_components/wait_for_wolt"
 python -m zipfile -e \
   "${WORK}/wait_for_wolt.zip" \
   "${WORK}/config/custom_components/wait_for_wolt"
+PACKAGED_VERSION="$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "${WORK}/config/custom_components/wait_for_wolt/manifest.json")"
+test "${PACKAGED_VERSION}" = "${VERSION}"
 cat > "${WORK}/config/configuration.yaml" <<'YAML'
 homeassistant:
   name: Wait for Wolt Canary

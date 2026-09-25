@@ -120,7 +120,7 @@ async def test_owned_legacy_migration_and_terminal_clear(hass, terminal):
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-        assert entry.data["tracking_maps"] is True
+        assert "tracking_maps" not in entry.data
         delivery = hass.states.get(legacy_ids["delivery"])
         assert delivery.state == "2"
         assert delivery.attributes["minutes_to_arrival"] == 2
@@ -142,7 +142,7 @@ async def test_owned_legacy_migration_and_terminal_clear(hass, terminal):
         assert hass.states.get(legacy_ids["pickup"]).attributes["latitude"] == 20
         assert (
             hass.states.get(legacy_ids["destination"]).attributes["coordinate_source"]
-            == "zone.home"
+            == "unavailable"
         )
         orders.return_value = (
             []
@@ -175,7 +175,7 @@ async def test_fresh_entry_has_no_location_entities_or_public_scraping(hass):
         await hass.async_block_till_done()
         assert (
             len(er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id))
-            == 2
+            == 3
         )
         page.assert_not_awaited()
 
