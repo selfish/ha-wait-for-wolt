@@ -18,7 +18,7 @@ DATA = {
     "refresh_token": "synthetic-refresh",
     "venue_ids": [],
 }
-OID = "synthetic-order-001"
+OID = "b" * 24
 ACTIVE = {"purchase_id": OID, "telemetry": {"order_status_type": "IN_PROGRESS"}}
 
 
@@ -175,7 +175,7 @@ async def test_fresh_entry_has_no_location_entities_or_public_scraping(hass):
         await hass.async_block_till_done()
         assert (
             len(er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id))
-            == 3
+            == 7
         )
         page.assert_not_awaited()
 

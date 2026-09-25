@@ -8,6 +8,14 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 
 ## [Unreleased]
 
+## [0.1.0b2] — 2026-09-25
+
+- Restrict registry discovery to canonical purchase identities and add source-verified order facts and route coordinates.
+- Prefer the live-verified purchase-tracking path endpoint; retain query-form fallback only for 404/405.
+- Add product quantity and opt-in order total/delivery fee/service fee sensors, with strict currency and amount validation.
+- Use Wolt's actual GeoJSON dropoff point with existing per-entity location consent; never substitute Home coordinates.
+- Keep payment time as an attribute, ambiguous amounts and missing venue availability unknown, and terminal routes inactive without stale locations.
+
 ## [0.1.0b1] - 2026-09-25
 
 ### Added

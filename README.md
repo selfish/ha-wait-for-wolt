@@ -25,6 +25,9 @@ web API, which may change without notice.
 - A typed **delivery minutes** sensor for each active order, retaining legacy
   automation targets rather than converting them into text status sensors.
 - Opt-in courier and pickup locations, refreshed through the shared coordinator.
+- Product quantity count (excluding modifiers), plus optional per-order total,
+  delivery fee and service fee sensors. Financial sensors are disabled by default;
+  enable them individually from the entity settings if wanted.
 
 Location history is sensitive. Under **Configure**, enable locations only if you
 want them stored in Home Assistant history. Existing locations are grandfathered
@@ -32,11 +35,17 @@ only for their original order; a future order requires explicit opt-in. Disabled
 entities remain disabled. Exclude location sensors from Recorder if you do not want
 a permanent history.
 
-The optional **Home destination reference** is your `zone.home`, explicitly marked
-`coordinate_source: home_reference`—not a verified Wolt dropoff address. Leave it
-off for deliveries elsewhere. Courier positions depend on Wolt returning them;
-this is 30-second polling, not websocket-level tracking. Spending history and
-websocket updates are deliberately excluded.
+The destination marker uses Wolt's actual delivery coordinates when provided and
+location permission allows it (`coordinate_source: wolt_dropoff`). It never
+substitutes `zone.home`. Courier positions and explicit dropoff events depend on
+Wolt returning them; this is 30-second polling, not websocket-level tracking.
+
+Amounts require an explicit recognized currency and integer minor units. The
+order total additionally cross-checks Wolt's displayed total against its numeric
+summary amount; ambiguous formats remain unknown. Quantities describe products,
+not modifier counts or weights. Payment time is a status attribute only when Wolt
+supplies an explicit timestamp; localized display dates are not guessed.
+See the [source audit](docs/DATA_SOURCES.md) for provenance and remaining limits.
 
 ## Installation via HACS
 Requires Home Assistant 2026.7.0 or newer.

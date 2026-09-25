@@ -22,7 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import WoltDataUpdateCoordinator
-from .privacy import location_allowed
+from .privacy import is_purchase_id, location_allowed
 
 
 def tracking_enabled(entry: ConfigEntry) -> bool:
@@ -179,18 +179,15 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
                 if "latitude" in attrs:
                     attrs["coordinate_source"] = "wolt_venue_json_ld"
             else:
-                # A home reference is an explicit convenience, not a Wolt dropoff.
-                attrs["coordinate_source"] = "unavailable"
-                if self.coordinator.entry.options.get("destination_home") is True:
-                    home = self.hass.states.get("zone.home")
-                    if home is not None:
-                        coords = coordinates(
-                            home.attributes.get("latitude"),
-                            home.attributes.get("longitude"),
-                        )
-                        attrs.update(coords)
-                        if coords:
-                            attrs["coordinate_source"] = "home_reference"
+                from .facts import dropoff_coordinates
+
+                point = dropoff_coordinates(details)
+                if point is not None:
+                    attrs.update(
+                        latitude=point[0],
+                        longitude=point[1],
+                        coordinate_source="wolt_dropoff",
+                    )
             attrs["route_point_type"] = self.kind
             return attrs
         driver = driver_fields(details)
@@ -257,10 +254,14 @@ def async_setup_tracking(
             for kind in ("delivery", "pickup", "destination"):
                 prefix, suffix = f"{entry.entry_id}_", f"_{kind}"
                 if uid.startswith(prefix) and uid.endswith(suffix):
-                    order_ids.add(uid[len(prefix) : -len(suffix)])
+                    order_id = uid[len(entry.entry_id) + 1 : -len(suffix)]
+                    if is_purchase_id(order_id):
+                        order_ids.add(order_id)
             for prefix in ("wolt_pickup_", "wolt_destination_", "wolt_"):
                 if uid.startswith(prefix) and not uid.startswith("wolt_venue_"):
-                    order_ids.add(uid[len(prefix) :])
+                    order_id = uid[len(prefix) :]
+                    if is_purchase_id(order_id):
+                        order_ids.add(order_id)
                     break
         for order_id in sorted(order_ids):
             for kind in ("delivery", "pickup", "destination"):

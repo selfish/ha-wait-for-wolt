@@ -1,7 +1,7 @@
-# Upgrading to 0.1.0b1
+# Upgrading to 0.1.0b2
 
 Back up the installed component and keep config entries and the entity registry.
-This is the first published beta; older commit-based builds were never releases.
+This beta follows the first packaged release; older commit-based builds were not releases.
 
 ## Preserved contracts
 
@@ -22,13 +22,14 @@ only that entity and that order—not unrelated entities, other accounts or futu
 orders. Explicitly disabling locations overrides inherited consent.
 
 To track locations on future orders, enable **Location attributes** in Configure.
-The destination marker has no inferred coordinates by default. **Home destination
-reference** explicitly supplies `zone.home` with `coordinate_source: home_reference`;
-it is never claimed to be the Wolt delivery address. Do not use it for deliveries
-elsewhere. Consider excluding location entities from Recorder.
+The destination marker uses only Wolt's actual GeoJSON dropoff coordinates, marked
+`coordinate_source: wolt_dropoff`; it no longer offers a Home-zone substitute.
+Consider excluding location entities from Recorder.
 
-Raw orders, addresses, item lists, payments, courier identity and financial history
-are not published. Existing private Recorder history is not automatically purged.
+Raw orders, addresses, item lists, payment instruments and courier identity are
+not published. New per-order total and fee entities are disabled by default;
+product quantity is available without publishing item names. Existing private
+Recorder history is not automatically purged.
 
 ## Deliberate limits
 

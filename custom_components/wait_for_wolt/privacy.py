@@ -1,5 +1,7 @@
 """Per-entity location consent, independent of delivery identity."""
 
+import re
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -7,6 +9,11 @@ from homeassistant.helpers import entity_registry as er
 from .const import DOMAIN
 
 LEGACY_LOCATIONS = "legacy_location_entities"
+
+
+def is_purchase_id(value: object) -> bool:
+    """Recognize observed Wolt purchase IDs, not arbitrary legacy suffixes."""
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{24}", value) is not None
 
 
 def migrate_location_consent(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -27,7 +34,10 @@ def migrate_location_consent(hass: HomeAssistant, entry: ConfigEntry) -> None:
                 # Venue sensors are not courier locations.
                 if kind == "delivery" and uid.startswith("wolt_venue_"):
                     break
-                allowed.append(f"{entry.entry_id}_{uid[len(prefix) :]}_{kind}")
+                order_id = uid[len(prefix) :]
+                if not is_purchase_id(order_id):
+                    break
+                allowed.append(f"{entry.entry_id}_{order_id}_{kind}")
                 break
     hass.config_entries.async_update_entry(
         entry, data={**entry.data, LEGACY_LOCATIONS: allowed}

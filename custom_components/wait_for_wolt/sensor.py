@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 import homeassistant.helpers.config_validation as cv
@@ -34,6 +35,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import WoltDataUpdateCoordinator
+from .facts import item_count, money, summary_total
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -296,6 +298,15 @@ async def async_setup_entry(
                 (
                     WoltOrderStatusSensor(coordinator, entry.entry_id, order_id),
                     WoltOrderEtaSensor(coordinator, entry.entry_id, order_id),
+                    *(
+                        WoltOrderFactSensor(coordinator, entry.entry_id, order_id, kind)
+                        for kind in (
+                            "item_count",
+                            "total",
+                            "delivery_fee",
+                            "service_fee",
+                        )
+                    ),
                 )
             )
         async_add_entities(entities)
@@ -350,7 +361,11 @@ class WoltOrderEntity(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEntity
     def _order_data(self) -> dict[str, Any]:
         """Merge the order summary with richer active tracking details."""
         summary = self.coordinator.data.orders.get(self.order_id, {})
-        details = self.coordinator.data.details.get(self.order_id, {})
+        details = (
+            self.coordinator.data.details.get(self.order_id, {})
+            if self.order_id in self.coordinator.data.active_order_ids
+            else {}
+        )
         return {**details, **summary}
 
     @property
@@ -386,8 +401,14 @@ class WoltOrderStatusSensor(WoltOrderEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Never persist order metadata or payload fragments as attributes."""
-        return {}
+        """Publish verified timeline instants, not localized date guesses."""
+        details = (
+            self.coordinator.data.details.get(self.order_id, {})
+            if self.order_id in self.coordinator.data.active_order_ids
+            else {}
+        )
+        paid_at = _parse_eta(details.get("payment_time"))
+        return {"payment_time": paid_at.isoformat()} if paid_at is not None else {}
 
 
 class WoltOrderEtaSensor(WoltOrderEntity):
@@ -415,6 +436,49 @@ class WoltOrderEtaSensor(WoltOrderEntity):
         return extract_order_eta(
             driver_fields(self.coordinator.data.details.get(self.order_id, {}))
         ) or extract_order_eta(self._order_data)
+
+
+class WoltOrderFactSensor(WoltOrderEntity):
+    """Typed purchase facts; no raw item, payment, or address objects."""
+
+    def __init__(
+        self,
+        coordinator: WoltDataUpdateCoordinator,
+        entry_id: str,
+        order_id: str,
+        kind: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, order_id)
+        self.kind = kind
+        self._attr_unique_id = _order_unique_id(entry_id, order_id, kind)
+        self._attr_translation_key = "order_" + kind
+        self._attr_device_class = (
+            None if kind == "item_count" else SensorDeviceClass.MONETARY
+        )
+        self._attr_entity_registry_enabled_default = kind == "item_count"
+
+    def _amount(self) -> tuple[Decimal | None, str | None]:
+        if self.kind == "total":
+            return summary_total(self.coordinator.data.orders.get(self.order_id, {}))
+        details = (
+            self.coordinator.data.details.get(self.order_id, {})
+            if self.order_id in self.coordinator.data.active_order_ids
+            else {}
+        )
+        return money(
+            details,
+            {"delivery_fee": "delivery_price", "service_fee": "service_fee"}[self.kind],
+        )
+
+    @property
+    def native_value(self) -> int | Decimal | None:
+        if self.kind == "item_count":
+            return item_count(self.coordinator.data.orders.get(self.order_id, {}))
+        return self._amount()[0]
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        return None if self.kind == "item_count" else self._amount()[1]
 
 
 class WoltVenueSensor(SensorEntity):
@@ -459,7 +523,9 @@ class WoltVenueSensor(SensorEntity):
             is_open = venue.get("is_open")
         if venue.get("online") is False:
             is_open = False
-        self._state = "open" if is_open else "closed"
+        self._state = (
+            "open" if is_open is True else "closed" if is_open is False else None
+        )
 
         # Extract estimates for available delivery methods
         estimates: dict[str, Any] = {}
