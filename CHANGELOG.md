@@ -8,6 +8,11 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 
 ## [Unreleased]
 
+- Reject boolean, non-finite, overflowing and out-of-range public venue coordinates
+  rather than publishing invalid pickup locations or interrupting polling.
+- Document the HACS 2.0.5 release-asset URL defect, verified manual installation
+  fallback and distinction between installed component and HACS version metadata.
+
 ## [0.1.0b2] — 2026-09-25
 
 - Restrict registry discovery to canonical purchase identities and add source-verified order facts and route coordinates.
