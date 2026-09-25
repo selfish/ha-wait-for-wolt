@@ -165,6 +165,13 @@ async def test_authoritative_terminal_clears_all_entities_and_survives_reload(
             assert "do-not-publish" not in str(s.attributes)
         assert state(hass, entry, "eta").state == "unknown"
         assert state(hass, entry, "delivery").state == "unknown"
+        for kind in ("pickup", "destination"):
+            assert state(hass, entry, kind).state == "inactive"
+            assert state(hass, entry, kind).attributes["route_point_type"] == kind
+            assert (
+                state(hass, entry, kind).attributes["coordinate_source"]
+                == "unavailable"
+            )
         assert await hass.config_entries.async_reload(entry.entry_id)
         await hass.async_block_till_done()
         assert state(hass, entry, "delivery").state == "unknown"

@@ -161,9 +161,11 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
         )
         attrs: dict[str, Any] = {
             "order_status_type": status_type,
-            "order_status": normalize_order_status(summary),
+            "order_status": normalize_order_status(order),
             "is_arriving_soon": False,
         }
+        if self.kind != "delivery":
+            attrs.update(route_point_type=self.kind, coordinate_source="unavailable")
         if not self.active:
             return attrs  # Never leave stale coordinates/arrival flags on completion.
         if self.kind != "delivery":
@@ -174,7 +176,8 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
                 attrs.update(
                     coordinates(location.get("latitude"), location.get("longitude"))
                 )
-                attrs["coordinate_source"] = "wolt_venue_json_ld"
+                if "latitude" in attrs:
+                    attrs["coordinate_source"] = "wolt_venue_json_ld"
             else:
                 # A home reference is an explicit convenience, not a Wolt dropoff.
                 attrs["coordinate_source"] = "unavailable"
