@@ -21,6 +21,35 @@ Inspect the actual failed URL in **Settings → System → Logs**. An HTTP 404 w
 problem; removing `tags/` does not repair DNS. Do not rotate Wolt credentials or
 remove the integration to fix either download failure.
 
+## Repair the HACS 2.0.5 installer
+
+An administrator can apply the narrowly scoped repair in
+[`scripts/repair_hacs_205.py`](../scripts/repair_hacs_205.py). It strips exactly
+the internal `tags/` prefix at the release-asset call site, not in Git reference
+handling. It only accepts the exact upstream HACS 2.0.5 source checksum; unknown
+versions and local changes are rejected. **Wait for Wolt never runs this repair
+automatically.** This is a local HACS hotfix, not an upstream HACS release.
+
+Run it on the HA host, after creating a backup, with suitable filesystem access:
+
+```bash
+python3 repair_hacs_205.py --config /config          # verify/dry run
+python3 repair_hacs_205.py --config /config --apply  # explicit modification
+```
+
+The original file is preserved under `/config/.hacs-205-release-url-backup/`.
+Restart HA to load the repaired Python module. Then select the new **v0.1.0b3**
+release in HACS and install normally (or use HA's `update.install` with
+`version: v0.1.0b3`). HACS downloads the published `wait_for_wolt.zip` and records
+the installed version through its own successful-install path. Compare installed
+files against that ZIP, restart HA, and confirm the loaded component version and
+HACS installed version both report b3. Do not edit HACS's private version ledger.
+
+To undo only the hotfix, run the script with `--apply --restore` and restart HA.
+It refuses to overwrite any unexpected source or use a mismatched backup. A
+future HACS update may replace this repair; check its release-ZIP download behavior
+before assuming the fix persists. Never apply it blindly to another HACS version.
+
 ## Verified manual fallback
 
 Use a release ZIP, never a working checkout or GitHub's **Source code (zip)**.

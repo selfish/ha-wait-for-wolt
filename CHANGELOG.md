@@ -8,6 +8,12 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 
 ## [Unreleased]
 
+## [0.1.0b3] — 2026-09-25
+
+- Include an explicit, checksum-pinned, reversible administrator repair for the
+  HACS 2.0.5 release-ZIP URL defect. The integration never patches HACS itself.
+  A subsequent normal HACS installation reconciles its version ledger.
+
 - Reject boolean, non-finite, overflowing and out-of-range public venue coordinates
   rather than publishing invalid pickup locations or interrupting polling.
 - Document the HACS 2.0.5 release-asset URL defect, verified manual installation
