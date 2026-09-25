@@ -254,6 +254,11 @@ def async_setup_tracking(
             if item.platform != DOMAIN or item.domain != "sensor":
                 continue
             uid = item.unique_id
+            if uid in {
+                "wolt_monthly_spend",
+                f"{entry.entry_id}_monthly_spend_delivery",
+            }:
+                continue
             for kind in ("delivery", "pickup", "destination"):
                 prefix, suffix = f"{entry.entry_id}_", f"_{kind}"
                 if uid.startswith(prefix) and uid.endswith(suffix):

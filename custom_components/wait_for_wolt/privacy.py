@@ -11,13 +11,39 @@ LEGACY_LOCATIONS = "legacy_location_entities"
 
 def migrate_location_consent(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Snapshot only owned legacy identities, once, without enabling future orders."""
+    registry = er.async_get(hass)
+    # Repair b1's over-broad discovery without deleting user customizations.
+    accidental = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_monthly_spend_delivery"
+    )
+    item = registry.async_get(accidental) if accidental else None
+    if (
+        item is not None
+        and item.config_entry_id == entry.entry_id
+        and registry.async_get_entity_id("sensor", DOMAIN, "wolt_monthly_spend") is None
+    ):
+        registry.async_update_entity(
+            item.entity_id,
+            new_unique_id="wolt_monthly_spend",
+            original_name="Wolt monthly spend (retired)",
+            original_device_class=None,
+            unit_of_measurement=None,
+        )
     if LEGACY_LOCATIONS in entry.data:
+        stale = f"{entry.entry_id}_monthly_spend_delivery"
+        allowed = [x for x in entry.data[LEGACY_LOCATIONS] if x != stale]
+        if allowed != entry.data[LEGACY_LOCATIONS]:
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, LEGACY_LOCATIONS: allowed}
+            )
         return
     allowed = []
     for item in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id):
         if item.platform != DOMAIN or item.domain != "sensor":
             continue
         uid = item.unique_id
+        if uid == "wolt_monthly_spend":
+            continue
         for kind, prefix in (
             ("pickup", "wolt_pickup_"),
             ("destination", "wolt_destination_"),

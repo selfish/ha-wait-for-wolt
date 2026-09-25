@@ -8,6 +8,10 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 
 ## [Unreleased]
 
+## [0.1.0b2] — 2026-09-25
+
+- Exclude the retired monthly-spend identity from purchase discovery and location consent. Live upgrade verification caught this reserved-ID collision; it must never become a delivery sensor.
+
 ## [0.1.0b1] - 2026-09-25
 
 ### Added
