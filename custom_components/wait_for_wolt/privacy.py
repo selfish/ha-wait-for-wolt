@@ -1,5 +1,7 @@
 """Per-entity location consent, independent of delivery identity."""
 
+import re
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -9,41 +11,20 @@ from .const import DOMAIN
 LEGACY_LOCATIONS = "legacy_location_entities"
 
 
+def is_purchase_id(value: object) -> bool:
+    """Recognize observed Wolt purchase IDs, not arbitrary legacy suffixes."""
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{24}", value) is not None
+
+
 def migrate_location_consent(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Snapshot only owned legacy identities, once, without enabling future orders."""
-    registry = er.async_get(hass)
-    # Repair b1's over-broad discovery without deleting user customizations.
-    accidental = registry.async_get_entity_id(
-        "sensor", DOMAIN, f"{entry.entry_id}_monthly_spend_delivery"
-    )
-    item = registry.async_get(accidental) if accidental else None
-    if (
-        item is not None
-        and item.config_entry_id == entry.entry_id
-        and registry.async_get_entity_id("sensor", DOMAIN, "wolt_monthly_spend") is None
-    ):
-        registry.async_update_entity(
-            item.entity_id,
-            new_unique_id="wolt_monthly_spend",
-            original_name="Wolt monthly spend (retired)",
-            original_device_class=None,
-            unit_of_measurement=None,
-        )
     if LEGACY_LOCATIONS in entry.data:
-        stale = f"{entry.entry_id}_monthly_spend_delivery"
-        allowed = [x for x in entry.data[LEGACY_LOCATIONS] if x != stale]
-        if allowed != entry.data[LEGACY_LOCATIONS]:
-            hass.config_entries.async_update_entry(
-                entry, data={**entry.data, LEGACY_LOCATIONS: allowed}
-            )
         return
     allowed = []
     for item in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id):
         if item.platform != DOMAIN or item.domain != "sensor":
             continue
         uid = item.unique_id
-        if uid == "wolt_monthly_spend":
-            continue
         for kind, prefix in (
             ("pickup", "wolt_pickup_"),
             ("destination", "wolt_destination_"),
@@ -53,7 +34,10 @@ def migrate_location_consent(hass: HomeAssistant, entry: ConfigEntry) -> None:
                 # Venue sensors are not courier locations.
                 if kind == "delivery" and uid.startswith("wolt_venue_"):
                     break
-                allowed.append(f"{entry.entry_id}_{uid[len(prefix) :]}_{kind}")
+                order_id = uid[len(prefix) :]
+                if not is_purchase_id(order_id):
+                    break
+                allowed.append(f"{entry.entry_id}_{order_id}_{kind}")
                 break
     hass.config_entries.async_update_entry(
         entry, data={**entry.data, LEGACY_LOCATIONS: allowed}

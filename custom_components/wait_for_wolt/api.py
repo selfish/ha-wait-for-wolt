@@ -15,7 +15,7 @@ import aiohttp
 from .const import (
     ACTIVE_ORDERS_URL,
     HEADERS,
-    ORDER_DETAILS_PATH_URL,
+    ORDER_DETAILS_FALLBACK_URL,
     ORDER_DETAILS_URL,
     REFRESH_URL,
     VENUE_CONTENT_URL,
@@ -266,7 +266,9 @@ class WoltApi:
         except WoltConnectionError as err:
             if err.status not in (404, 405):
                 raise
-            data = await self._request("GET", ORDER_DETAILS_PATH_URL.format(quoted_id))
+            data = await self._request(
+                "GET", ORDER_DETAILS_FALLBACK_URL.format(quoted_id)
+            )
         if not isinstance(data, dict):
             raise WoltInvalidPayloadError("Wolt order details payload is invalid")
         details = data.get("order_details")

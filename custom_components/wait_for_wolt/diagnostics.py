@@ -19,7 +19,6 @@ async def async_get_config_entry_diagnostics(
     return {
         "options": {
             "tracking_maps": entry.options.get("tracking_maps") is True,
-            "destination_home": entry.options.get("destination_home") is True,
         },
         "coordinator": {
             "last_update_success": coordinator.last_update_success,

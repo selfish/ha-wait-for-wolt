@@ -13,7 +13,7 @@ from custom_components.wait_for_wolt.const import DOMAIN
 from custom_components.wait_for_wolt.privacy import location_allowed
 
 DATA = {"bearer_token": "test-access", "refresh_token": "test-refresh", "venue_ids": []}
-OID = "synthetic-one"
+OID = "a" * 24
 ACTIVE = {"purchase_id": OID, "telemetry": {"order_status_type": "IN_PROGRESS"}}
 
 
@@ -240,13 +240,8 @@ async def test_optional_rate_limit_keeps_summary_and_backs_off(hass):
         assert state(hass, entry, "delivery").state == "unavailable"
 
 
-@pytest.mark.parametrize("home_reference", [False, True])
-async def test_destination_never_silently_uses_home(hass, home_reference):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data=DATA,
-        options={"tracking_maps": True, "destination_home": home_reference},
-    )
+async def test_destination_never_silently_uses_home(hass):
+    entry = MockConfigEntry(domain=DOMAIN, data=DATA, options={"tracking_maps": True})
     entry.add_to_hass(hass)
     hass.states.async_set("zone.home", "0", {"latitude": 12, "longitude": 34})
     with (
@@ -257,10 +252,8 @@ async def test_destination_never_silently_uses_home(hass, home_reference):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         attrs = state(hass, entry, "destination").attributes
-        assert attrs["coordinate_source"] == (
-            "home_reference" if home_reference else "unavailable"
-        )
-        assert ("latitude" in attrs) is home_reference
+        assert attrs["coordinate_source"] == "unavailable"
+        assert "latitude" not in attrs
 
 
 @pytest.mark.parametrize("returned", [True, False])

@@ -102,8 +102,8 @@ async def test_initial_active_order_is_added_once(hass: HomeAssistant) -> None:
 
     assert add_entities.call_count == 2
     entities = add_entities.call_args.args[0]
-    assert [entity.order_id for entity in entities] == [order_id, order_id]
-    assert [type(entity) for entity in entities] == [
+    assert [entity.order_id for entity in entities] == [order_id] * 6
+    assert [type(entity) for entity in entities[:2]] == [
         WoltOrderStatusSensor,
         WoltOrderEtaSensor,
     ]
@@ -134,8 +134,7 @@ async def test_coordinator_listener_discovers_only_new_orders(
     assert add_entities.call_count == 1
     assert [entity.order_id for entity in add_entities.call_args.args[0]] == [
         order_id,
-        order_id,
-    ]
+    ] * 6
 
 
 async def test_order_entities_are_typed_scoped_and_privacy_safe() -> None:
@@ -364,7 +363,7 @@ async def test_inactive_legacy_order_is_migrated_and_restored(
     assert migrated is not None
     assert migrated.unique_id == f"{entry.entry_id}_{order_id}_delivery"
     entities = add_entities.call_args.args[0]
-    assert len(entities) == 2
+    assert len(entities) == 6
     status = next(
         entity for entity in entities if isinstance(entity, WoltOrderStatusSensor)
     )
@@ -404,7 +403,7 @@ async def test_inactive_scoped_order_is_restored_after_restart(
     await async_setup_entry(hass, entry, add_entities)
 
     entities = add_entities.call_args.args[0]
-    assert len(entities) == 2
+    assert len(entities) == 6
     status = next(
         entity for entity in entities if isinstance(entity, WoltOrderStatusSensor)
     )
@@ -539,3 +538,12 @@ async def test_venue_sensor_respects_explicit_closed_status() -> None:
 
     assert sensor.available
     assert sensor.native_value == "closed"
+
+
+async def test_venue_missing_availability_is_unknown() -> None:
+    api = AsyncMock(spec=WoltApi)
+    api.fetch_venue_details.return_value = {"venue": {"name": "synthetic"}}
+    sensor = WoltVenueSensor(api, "entry-001", "synthetic", "Wolt synthetic")
+    await sensor.async_update()
+    assert sensor.available
+    assert sensor.native_value is None
