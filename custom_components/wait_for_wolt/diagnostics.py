@@ -1,44 +1,26 @@
-"""Privacy-preserving diagnostics for Wait for Wolt."""
+"""Default-deny, count-only diagnostics for Wait for Wolt."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
-
-from .const import (
-    CONF_BEARER_TOKEN,
-    CONF_CLIENT_ID,
-    CONF_REFRESH_TOKEN,
-    CONF_SESSION_ID,
-    CONF_VENUE_IDS,
-)
-
-TO_REDACT = {
-    CONF_NAME,
-    CONF_SESSION_ID,
-    CONF_BEARER_TOKEN,
-    CONF_CLIENT_ID,
-    CONF_REFRESH_TOKEN,
-    CONF_VENUE_IDS,
-}
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
+    hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
-    """Return operational counts without order, courier, venue, or credential data."""
+    """Never serialize config data, registry identities or private Wolt payloads."""
     del hass
     coordinator = entry.runtime_data.coordinator
     data = coordinator.data
     interval = coordinator.update_interval
     return {
-        "entry": async_redact_data(dict(entry.data), TO_REDACT),
-        "options": async_redact_data(dict(entry.options), TO_REDACT),
+        "options": {
+            "tracking_maps": entry.options.get("tracking_maps") is True,
+            "destination_home": entry.options.get("destination_home") is True,
+        },
         "coordinator": {
             "last_update_success": coordinator.last_update_success,
             "known_order_count": len(data.orders),

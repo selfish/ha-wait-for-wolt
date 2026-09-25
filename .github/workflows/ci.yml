@@ -58,7 +58,7 @@ jobs:
       matrix:
         homeassistant:
           - "2026.7.0"
-          - "2026.7.4"
+          - "2026.9.3"
     steps:
       - name: Check out the exact source commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,17 +70,8 @@ jobs:
           python-version: "3.14"
       - name: Install uv
         run: python -m pip install uv==0.11.25
-      - name: Install locked development dependencies
-        run: uv sync --frozen
-      - name: Select Home Assistant runtime
-        run: uv pip install --no-deps "homeassistant==${{ matrix.homeassistant }}"
-      - name: Test exact runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          actual="$(uv run --no-sync python -c 'from importlib.metadata import version; print(version("homeassistant"))')"
-          test "${actual}" = "${{ matrix.homeassistant }}"
-          uv run --no-sync pytest
+      - name: Test fully resolved exact runtime
+        run: python scripts/test_runtime.py "${{ matrix.homeassistant }}"
 
   hassfest:
     name: Hassfest

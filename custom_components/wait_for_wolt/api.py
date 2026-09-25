@@ -114,6 +114,7 @@ class WoltApi:
         self._token_update_callback = token_update_callback
         self._refresh_lock = asyncio.Lock()
         self._web_client_id = client_id or str(uuid.uuid4())
+        self._venue_locations: dict[str, dict[str, Any]] = {}
 
     @property
     def access_token(self) -> str:
@@ -269,11 +270,48 @@ class WoltApi:
         if not isinstance(data, dict):
             raise WoltInvalidPayloadError("Wolt order details payload is invalid")
         details = data.get("order_details")
-        if isinstance(details, dict):
-            return details
         if isinstance(details, list) and details and isinstance(details[0], dict):
-            return details[0]
-        raise WoltInvalidPayloadError("Wolt order details payload is invalid")
+            details = details[0]
+        if not isinstance(details, dict):
+            raise WoltInvalidPayloadError("Wolt order details payload is invalid")
+        # Driver locations belong to the envelope, not order_details. Keep them
+        # in memory only; entity publication is separately opt-in and allowlisted.
+        drivers = data.get("drivers")
+        if isinstance(drivers, list):
+            return {**details, "_drivers": drivers}
+        return details
+
+    async def fetch_venue_location(self, order: dict[str, Any]) -> dict[str, Any]:
+        """Read only public JSON-LD, without sending account headers/cookies."""
+        from .venue import build_venue_page_url, parse_venue_page
+
+        url = build_venue_page_url(order)
+        if not url:
+            return {}
+        if url in self._venue_locations:
+            return self._venue_locations[url]
+        try:
+            async with asyncio.timeout(REQUEST_TIMEOUT):
+                async with self._session.get(
+                    url, headers={"Accept": "text/html"}, allow_redirects=False
+                ) as response:
+                    if response.status != 200:
+                        raise WoltConnectionError(
+                            "Public Wolt venue page unavailable", status=response.status
+                        )
+                    html = await response.text()
+            location = parse_venue_page(html) or {}
+        except (TimeoutError, aiohttp.ClientError) as err:
+            raise WoltConnectionError("Public Wolt venue page unavailable") from err
+        result = {
+            "latitude": location.get("venue_latitude"),
+            "longitude": location.get("venue_longitude"),
+        }
+        if result["latitude"] is not None and result["longitude"] is not None:
+            if len(self._venue_locations) >= 64:
+                self._venue_locations.clear()
+            self._venue_locations[url] = result
+        return result
 
     async def fetch_venue_details(self, slug: str) -> dict[str, Any]:
         """Fetch public venue details without sending account credentials."""

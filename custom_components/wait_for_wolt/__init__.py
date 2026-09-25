@@ -37,6 +37,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Create the shared client/coordinator and set up entry platforms."""
+    from .privacy import migrate_location_consent
+
+    migrate_location_consent(hass, entry)
     if not entry.data.get(CONF_CLIENT_ID):
         hass.config_entries.async_update_entry(
             entry,

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.7.3}"
+IMAGE="${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.9.3}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/wait-for-wolt-canary.XXXXXX")"
 NAME="wait-for-wolt-canary-$$"
 cleanup() {
@@ -21,7 +21,7 @@ if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
   echo "Canary requires a clean checkout so artifact metadata binds exact source" >&2
   exit 2
 fi
-VERSION="$(uv run python scripts/check_version.py)"
+VERSION="$(uv run --no-sync python scripts/check_version.py)"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
 if [[ -n "${CANARY_ARCHIVE:-}" || -n "${CANARY_CHECKSUM:-}" || -n "${CANARY_METADATA:-}" ]]; then
   if [[ ! -f "${CANARY_ARCHIVE:-}" || ! -f "${CANARY_CHECKSUM:-}" || ! -f "${CANARY_METADATA:-}" ]]; then
@@ -45,6 +45,8 @@ mkdir -p "${WORK}/config/custom_components/wait_for_wolt"
 python -m zipfile -e \
   "${WORK}/wait_for_wolt.zip" \
   "${WORK}/config/custom_components/wait_for_wolt"
+PACKAGED_VERSION="$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "${WORK}/config/custom_components/wait_for_wolt/manifest.json")"
+test "${PACKAGED_VERSION}" = "${VERSION}"
 cat > "${WORK}/config/configuration.yaml" <<'YAML'
 homeassistant:
   name: Wait for Wolt Canary
@@ -60,7 +62,7 @@ docker run --rm \
   -w /config/custom_components \
   -v "${WORK}/config:/config" \
   "${IMAGE}" \
-  python -c 'import wait_for_wolt, wait_for_wolt.api, wait_for_wolt.config_flow, wait_for_wolt.const, wait_for_wolt.coordinator, wait_for_wolt.diagnostics, wait_for_wolt.sensor'
+  python -c 'import importlib,pathlib; [importlib.import_module("wait_for_wolt" if p.stem == "__init__" else "wait_for_wolt."+p.stem) for p in pathlib.Path("wait_for_wolt").glob("*.py")]'
 
 docker run --rm \
   --name "${NAME}-check" \

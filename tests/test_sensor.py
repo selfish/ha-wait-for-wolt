@@ -100,7 +100,7 @@ async def test_initial_active_order_is_added_once(hass: HomeAssistant) -> None:
     listener = coordinator.async_add_listener.call_args.args[0]
     listener()
 
-    assert add_entities.call_count == 1
+    assert add_entities.call_count == 2
     entities = add_entities.call_args.args[0]
     assert [entity.order_id for entity in entities] == [order_id, order_id]
     assert [type(entity) for entity in entities] == [
@@ -297,10 +297,10 @@ def test_order_eta_requires_an_explicit_timestamp(value: Any, expected: Any) -> 
     assert extract_order_eta({"delivery_eta": value}) == expected
 
 
-async def test_legacy_order_unique_id_migrates_to_scoped_status_entity(
+async def test_legacy_order_unique_id_migrates_to_scoped_duration_entity(
     hass: HomeAssistant,
 ) -> None:
-    """Preserve the existing status entity while adding config-entry scope."""
+    """Preserve delivery/minutes even without location consent."""
     order_id = "sanitized-purchase-001"
     coordinator = mock_coordinator(
         WoltCoordinatorData(
@@ -324,8 +324,8 @@ async def test_legacy_order_unique_id_migrates_to_scoped_status_entity(
 
     migrated = registry.async_get(legacy.entity_id)
     assert migrated is not None
-    assert migrated.unique_id == f"{entry.entry_id}_{order_id}_status"
-    assert migrated.translation_key == "order_status"
+    assert migrated.unique_id == f"{entry.entry_id}_{order_id}_delivery"
+    assert migrated.translation_key != "order_status"
 
 
 async def test_inactive_legacy_order_is_migrated_and_restored(
@@ -362,7 +362,7 @@ async def test_inactive_legacy_order_is_migrated_and_restored(
 
     migrated = registry.async_get(legacy.entity_id)
     assert migrated is not None
-    assert migrated.unique_id == f"{entry.entry_id}_{order_id}_status"
+    assert migrated.unique_id == f"{entry.entry_id}_{order_id}_delivery"
     entities = add_entities.call_args.args[0]
     assert len(entities) == 2
     status = next(
