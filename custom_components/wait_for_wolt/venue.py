@@ -8,6 +8,7 @@ canonical address and exact venue coordinates.
 from __future__ import annotations
 
 import json
+import math
 import re
 import unicodedata
 from html.parser import HTMLParser
@@ -86,10 +87,13 @@ def _iter_json_ld_objects(value: Any):
 
 
 def _number(value: Any) -> float | None:
-    try:
-        return float(value)
-    except TypeError, ValueError:
+    if isinstance(value, bool):
         return None
+    try:
+        number = float(value)
+    except TypeError, ValueError, OverflowError:
+        return None
+    return number if math.isfinite(number) else None
 
 
 def parse_venue_page(
@@ -118,7 +122,12 @@ def parse_venue_page(
             geo = item.get("geo") if isinstance(item.get("geo"), dict) else {}
             latitude = _number(geo.get("latitude"))
             longitude = _number(geo.get("longitude"))
-            if latitude is None or longitude is None:
+            if (
+                latitude is None
+                or longitude is None
+                or not -90 <= latitude <= 90
+                or not -180 <= longitude <= 180
+            ):
                 continue
             address = item.get("address")
             address_data = address if isinstance(address, dict) else {}

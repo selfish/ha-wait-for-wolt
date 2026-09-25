@@ -53,9 +53,12 @@ Requires Home Assistant 2026.7.0 or newer.
 1. Add this repository as a custom repository in [HACS](https://hacs.xyz/).
 2. Install the latest **Wait for Wolt** GitHub release and restart Home Assistant.
 
-Release builds use versioned tags such as `v0.1.0b1`; HACS will no longer show
-commit hashes after the first release is published. Beta versions are opt-in
+Release builds use versioned tags such as `v0.1.0b2`. Beta versions are opt-in
 validation builds and are not promoted to production without the canary matrix.
+HACS 2.0.5 can construct an incorrect release-asset URL for these ZIP releases;
+see [installation troubleshooting](docs/INSTALLATION.md) for the verified manual
+fallback. Repository validation and container canaries do not prove HACS download
+success.
 
 ## Authentication
 
