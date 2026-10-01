@@ -82,7 +82,7 @@ jobs:
         with:
           ref: ${{ env.COMMIT_SHA }}
       - name: Validate with Hassfest
-        uses: home-assistant/actions/hassfest@e3fb68ebda13d88a0d695082f471ba2c83d025fb # master, 2026-07-21
+        uses: home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3 # master, 2026-07-21
 
   hacs:
     name: HACS validation
