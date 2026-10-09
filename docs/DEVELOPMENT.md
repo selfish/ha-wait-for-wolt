@@ -11,11 +11,15 @@ Home Assistant account.
 ## Clean-checkout commands
 
 ```bash
-uv sync --frozen
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest
+uv sync --locked
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked pytest
 ```
+
+Use `uv lock` explicitly when changing dependency pins, and commit the reviewed
+`uv.lock` diff. The `--locked` commands fail on stale dependency metadata instead
+of silently repairing the lockfile.
 
 Hassfest can also be run with the same official container used by Home Assistant's
 GitHub Action:

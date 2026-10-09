@@ -21,7 +21,7 @@ if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
   echo "Canary requires a clean checkout so artifact metadata binds exact source" >&2
   exit 2
 fi
-VERSION="$(uv run --no-sync python scripts/check_version.py)"
+VERSION="$(uv run --locked python scripts/check_version.py)"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
 if [[ -n "${CANARY_ARCHIVE:-}" || -n "${CANARY_CHECKSUM:-}" || -n "${CANARY_METADATA:-}" ]]; then
   if [[ ! -f "${CANARY_ARCHIVE:-}" || ! -f "${CANARY_CHECKSUM:-}" || ! -f "${CANARY_METADATA:-}" ]]; then
@@ -33,7 +33,7 @@ if [[ -n "${CANARY_ARCHIVE:-}" || -n "${CANARY_CHECKSUM:-}" || -n "${CANARY_META
   cp "${CANARY_METADATA}" "${WORK}/artifact.metadata"
 else
   SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
-    uv run python scripts/build_release.py --label canary --output-dir "${WORK}"
+    uv run --locked python scripts/build_release.py --label canary --output-dir "${WORK}"
   printf 'commit=%s\n' "${EXPECTED_COMMIT}" > "${WORK}/artifact.metadata"
 fi
 (

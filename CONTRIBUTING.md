@@ -13,10 +13,10 @@ Thanks for helping improve Wait for Wolt. This is an unofficial Home Assistant i
 Install [uv](https://docs.astral.sh/uv/), then run:
 
 ```bash
-uv sync --frozen
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest
+uv sync --locked
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked pytest
 ```
 
 See [Development and verification](docs/DEVELOPMENT.md) for the full workflow and exact-commit review artifacts.
