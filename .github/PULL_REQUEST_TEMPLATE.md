@@ -16,9 +16,9 @@
 
 <!-- List commands actually run and their results. -->
 
-- [ ] `uv run ruff check .`
-- [ ] `uv run ruff format --check .`
-- [ ] `uv run pytest`
+- [ ] `uv run --locked ruff check .`
+- [ ] `uv run --locked ruff format --check .`
+- [ ] `uv run --locked pytest`
 - [ ] Hassfest/HACS validation, when applicable
 
 ## Home Assistant compatibility
