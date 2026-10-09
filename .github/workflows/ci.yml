@@ -28,22 +28,22 @@ jobs:
       - name: Install uv
         run: python -m pip install uv==0.11.25
       - name: Install locked development dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
       - name: Lint
-        run: uv run ruff check .
+        run: uv run --locked ruff check .
       - name: Check formatting
-        run: uv run ruff format --check .
+        run: uv run --locked ruff format --check .
       - name: Test
-        run: uv run pytest
+        run: uv run --locked pytest
       - name: Verify version metadata
-        run: uv run python scripts/check_version.py
+        run: uv run --locked python scripts/check_version.py
       - name: Scan for committed secrets
         shell: bash
         run: |
           set -euo pipefail
-          uv run detect-secrets scan --all-files \
+          uv run --locked detect-secrets scan --all-files \
             --exclude-files '^(\.git|\.venv|\.pytest_cache|\.ruff_cache)/' > /tmp/detect-secrets.json
-          uv run python - <<'PY'
+          uv run --locked python - <<'PY'
           import json
           results = json.load(open("/tmp/detect-secrets.json"))["results"]
           if results:
@@ -58,7 +58,7 @@ jobs:
       matrix:
         homeassistant:
           - "2026.7.0"
-          - "2026.7.4"
+          - "2026.9.3"
     steps:
       - name: Check out the exact source commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,17 +70,8 @@ jobs:
           python-version: "3.14"
       - name: Install uv
         run: python -m pip install uv==0.11.25
-      - name: Install locked development dependencies
-        run: uv sync --frozen
-      - name: Select Home Assistant runtime
-        run: uv pip install --no-deps "homeassistant==${{ matrix.homeassistant }}"
-      - name: Test exact runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          actual="$(uv run --no-sync python -c 'from importlib.metadata import version; print(version("homeassistant"))')"
-          test "${actual}" = "${{ matrix.homeassistant }}"
-          uv run --no-sync pytest
+      - name: Test fully resolved exact runtime
+        run: python scripts/test_runtime.py "${{ matrix.homeassistant }}"
 
   hassfest:
     name: Hassfest
@@ -91,7 +82,7 @@ jobs:
         with:
           ref: ${{ env.COMMIT_SHA }}
       - name: Validate with Hassfest
-        uses: home-assistant/actions/hassfest@e3fb68ebda13d88a0d695082f471ba2c83d025fb # master, 2026-07-21
+        uses: home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3 # master, 2026-07-21
 
   hacs:
     name: HACS validation

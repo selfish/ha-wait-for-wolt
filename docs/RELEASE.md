@@ -17,11 +17,11 @@ The same version must appear in:
 2. Run the complete local suite:
 
    ```bash
-   uv sync --frozen
-   uv run ruff check .
-   uv run ruff format --check .
-   uv run pytest
-   uv run python scripts/check_version.py
+   uv sync --locked
+   uv run --locked ruff check .
+   uv run --locked ruff format --check .
+   uv run --locked pytest
+   uv run --locked python scripts/check_version.py
    scripts/canary.sh
    ```
 

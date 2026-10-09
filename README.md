@@ -22,8 +22,30 @@ web API, which may change without notice.
   estimates when Wolt provides them.
 - Conservative shared polling and privacy-preserving diagnostics.
 
-Live courier maps, route points, spending history, and websocket updates are not
-part of the current release-ready feature set.
+- A typed **delivery minutes** sensor for each active order, retaining legacy
+  automation targets rather than converting them into text status sensors.
+- Opt-in courier and pickup locations, refreshed through the shared coordinator.
+- Product quantity count (excluding modifiers), plus optional per-order total,
+  delivery fee and service fee sensors. Financial sensors are disabled by default;
+  enable them individually from the entity settings if wanted.
+
+Location history is sensitive. Under **Configure**, enable locations only if you
+want them stored in Home Assistant history. Existing locations are grandfathered
+only for their original order; a future order requires explicit opt-in. Disabled
+entities remain disabled. Exclude location sensors from Recorder if you do not want
+a permanent history.
+
+The destination marker uses Wolt's actual delivery coordinates when provided and
+location permission allows it (`coordinate_source: wolt_dropoff`). It never
+substitutes `zone.home`. Courier positions and explicit dropoff events depend on
+Wolt returning them; this is 30-second polling, not websocket-level tracking.
+
+Amounts require an explicit recognized currency and integer minor units. The
+order total additionally cross-checks Wolt's displayed total against its numeric
+summary amount; ambiguous formats remain unknown. Quantities describe products,
+not modifier counts or weights. Payment time is a status attribute only when Wolt
+supplies an explicit timestamp; localized display dates are not guessed.
+See the [source audit](docs/DATA_SOURCES.md) for provenance and remaining limits.
 
 ## Installation via HACS
 Requires Home Assistant 2026.7.0 or newer.
@@ -31,9 +53,12 @@ Requires Home Assistant 2026.7.0 or newer.
 1. Add this repository as a custom repository in [HACS](https://hacs.xyz/).
 2. Install the latest **Wait for Wolt** GitHub release and restart Home Assistant.
 
-Release builds use versioned tags such as `v0.1.0b1`; HACS will no longer show
-commit hashes after the first release is published. Beta versions are opt-in
+Release builds use versioned tags such as `v0.1.0b2`. Beta versions are opt-in
 validation builds and are not promoted to production without the canary matrix.
+HACS 2.0.5 can construct an incorrect release-asset URL for these ZIP releases;
+see [installation troubleshooting](docs/INSTALLATION.md) for the verified manual
+fallback. Repository validation and container canaries do not prove HACS download
+success.
 
 ## Authentication
 
@@ -127,12 +152,15 @@ opens a reauthentication flow.
 
 ## How it works
 - The integration refreshes the bearer token automatically.
-- One shared coordinator polls every 30 seconds while an order is active and every
-  five minutes while idle. Each authenticated endpoint is fetched at most once per
-  cycle, and optional rich tracking failures fall back to the order summary.
+- The coordinator polls every 30 seconds while an order is active and every
+  minute while idle. Each authenticated endpoint is fetched at most once per
+  cycle. Optional rich tracking failures fall back to the order summary and retry
+  with bounded exponential backoff. Completed, cancelled, malformed-status, and
+  vanished orders clear arrival flags, ETA, minutes and courier coordinates.
 - Each in-progress purchase gets a device with a stable enum status sensor and a
-  timestamp ETA sensor. Existing status entities are migrated to config-entry-scoped
-  unique IDs. Order identifiers, venue labels, item lists, payment values, addresses,
+  timestamp ETA sensor, plus a numeric delivery-minutes sensor. Legacy `wolt_<id>`
+  identities migrate to delivery/minutes, never status. New unique IDs are scoped
+  to the config entry. Order identifiers, venue labels, item lists, payment values, addresses,
   and raw API payloads are intentionally not exposed in user-facing device names or
   entity attributes.
 - New orders placed while Home Assistant is running are discovered automatically within the polling interval.

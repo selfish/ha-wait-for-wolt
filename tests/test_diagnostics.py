@@ -37,6 +37,8 @@ async def test_diagnostics_expose_counts_without_credentials_or_order_pii(
             CONF_BEARER_TOKEN: "private-access-token",
             CONF_CLIENT_ID: "private-client-id",
             CONF_REFRESH_TOKEN: "private-refresh-token",
+            "legacy_location_entities": ["private-purchase-id"],
+            "future_secret": {"value": "private-access-token"},
         },
         options={CONF_VENUE_IDS: ["private-venue-slug"]},
     )

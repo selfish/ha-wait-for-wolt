@@ -16,7 +16,7 @@ from custom_components.wait_for_wolt.api import (
 )
 from custom_components.wait_for_wolt.const import (
     ACTIVE_ORDERS_URL,
-    ORDER_DETAILS_PATH_URL,
+    ORDER_DETAILS_FALLBACK_URL,
     ORDER_DETAILS_URL,
     REFRESH_URL,
     VENUE_CONTENT_URL,
@@ -429,7 +429,7 @@ async def test_order_details_uses_rich_purchase_tracking_endpoint() -> None:
     assert session.calls[0]["url"] == ORDER_DETAILS_URL.format("purchase-001")
     assert session.calls[0]["url"] == (
         "https://restaurant-api.wolt.com/v2/order_details/purchase_tracking"
-        "?purchase_id=purchase-001"
+        "/purchase-001"
     )
 
 
@@ -445,7 +445,7 @@ async def test_order_details_accepts_legacy_list_shape() -> None:
 
 
 @pytest.mark.parametrize("missing_status", [404, 405])
-async def test_order_details_falls_back_to_observed_path_form(
+async def test_order_details_falls_back_to_query_form(
     missing_status: int,
 ) -> None:
     """Support both private purchase-tracking URL forms seen in live clients."""
@@ -459,7 +459,7 @@ async def test_order_details_falls_back_to_observed_path_form(
     }
     assert [call["url"] for call in session.calls] == [
         ORDER_DETAILS_URL.format("purchase%2Fwith%20space"),
-        ORDER_DETAILS_PATH_URL.format("purchase%2Fwith%20space"),
+        ORDER_DETAILS_FALLBACK_URL.format("purchase%2Fwith%20space"),
     ]
 
 

@@ -139,9 +139,11 @@ async def test_real_platform_migrates_historical_entity_and_state(
     migrated = registry.async_get(legacy.entity_id)
     assert migrated is not None
     assert migrated.entity_id == legacy.entity_id
-    assert migrated.unique_id == f"{entry.entry_id}_{order_id}_status"
+    assert migrated.unique_id == f"{entry.entry_id}_{order_id}_delivery"
     assert migrated.name == "Keep this custom name"
     state = hass.states.get(legacy.entity_id)
     assert state is not None
-    assert state.state == "delivered"
+    assert state.state == "unknown"
+    assert state.attributes["device_class"] == "duration"
+    assert state.attributes["order_status"] == "delivered"
     assert entry.state is ConfigEntryState.LOADED
