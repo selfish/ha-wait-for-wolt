@@ -108,7 +108,7 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
         self.allow_location = allow_location
         self._attr_unique_id = f"{entry_id}_{order_id}_{kind}"
         # Prefixes are a public compatibility contract used by existing cards.
-        self._attr_name = f"Wolt {kind} order"
+
         self._attr_icon = {
             "delivery": "mdi:moped",
             "pickup": "mdi:store-marker",
@@ -117,6 +117,14 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
         if kind == "delivery":
             self._attr_device_class = SensorDeviceClass.DURATION
             self._attr_native_unit_of_measurement = UnitOfTime.MINUTES
+
+    @property
+    def name(self) -> str:
+        """Keep the card-compatible prefix while distinguishing each venue."""
+        from .facts import venue_name
+
+        label = venue_name(self.coordinator.data.orders.get(self.order_id, {}))
+        return f"Wolt {self.kind} {label or 'order'}"
 
     @property
     def active(self) -> bool:
@@ -164,6 +172,10 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
             "order_status": normalize_order_status(order),
             "is_arriving_soon": False,
         }
+        from .facts import venue_name
+
+        if label := venue_name(summary):
+            attrs["venue_name"] = label
         if self.kind != "delivery":
             attrs.update(route_point_type=self.kind, coordinate_source="unavailable")
         if not self.active:

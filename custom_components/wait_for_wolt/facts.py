@@ -34,6 +34,16 @@ _EXPONENTS: dict[str, int] = dict.fromkeys(
 _EXPONENTS.update(JPY=0, KRW=0, BHD=3, KWD=3, OMR=3, TND=3)
 
 
+def venue_name(order: dict[str, Any]) -> str | None:
+    """Read only the order summary's canonical venue label, never customer text."""
+    venue = order.get("venue")
+    name = venue.get("name") if isinstance(venue, dict) else None
+    if not isinstance(name, str) or any(ord(c) < 32 for c in name):
+        return None
+    name = name.strip()
+    return name if name and len(name) <= 255 else None
+
+
 def money(data: dict[str, Any], key: str) -> tuple[Decimal | None, str | None]:
     """Read integer minor units with an explicit, recognized currency."""
     currency = data.get("currency")

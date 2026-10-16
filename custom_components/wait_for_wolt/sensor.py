@@ -375,8 +375,23 @@ class WoltOrderEntity(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEntity
             identifiers={(DOMAIN, f"{self._entry_id}:{self.order_id}")},
             manufacturer="Wolt",
             model="Delivery order",
-            name="Wolt order",
+            name=self._device_name,
         )
+
+    @property
+    def _device_name(self) -> str:
+        from .facts import venue_name
+
+        label = venue_name(self.coordinator.data.orders.get(self.order_id, {}))
+        return f"Wolt order · {label}" if label else "Wolt order"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Restore the venue label used by existing cards and notifications."""
+        from .facts import venue_name
+
+        label = venue_name(self.coordinator.data.orders.get(self.order_id, {}))
+        return {"venue_name": label} if label else {}
 
 
 class WoltOrderStatusSensor(WoltOrderEntity):
@@ -408,7 +423,10 @@ class WoltOrderStatusSensor(WoltOrderEntity):
             else {}
         )
         paid_at = _parse_eta(details.get("payment_time"))
-        return {"payment_time": paid_at.isoformat()} if paid_at is not None else {}
+        attrs = super().extra_state_attributes
+        if paid_at is not None:
+            attrs["payment_time"] = paid_at.isoformat()
+        return attrs
 
 
 class WoltOrderEtaSensor(WoltOrderEntity):
