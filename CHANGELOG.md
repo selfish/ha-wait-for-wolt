@@ -8,6 +8,16 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 
 ## [Unreleased]
 
+## [0.1.0b4] — 2026-10-16
+
+- Restore the canonical `venue.name` as the scalar `venue_name` attribute used by
+  existing notifications; distinguish delivery and route labels by venue.
+- Name per-order devices after their venue while preserving entity/unique IDs,
+  user customizations, automation prefixes, and location consent.
+- Cover simultaneous venues, reload identity continuity, and independent terminal
+  cleanup with synthetic Home Assistant lifecycle tests. Venue labels are visible
+  in HA and may be stored by recorder; diagnostics remain count-only.
+
 ## [0.1.0b3] — 2026-09-25
 
 - Include an explicit, checksum-pinned, reversible administrator repair for the
