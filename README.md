@@ -115,6 +115,13 @@ first-party consumer OAuth/device flow if Wolt publishes one.
 
 
 ## Configuration
+
+Orders are labeled by their venue, including simultaneous deliveries. The scalar
+`venue_name` attribute is available to cards and notification templates; existing
+entity IDs and custom names are preserved on upgrade. Venue labels are visible in
+Home Assistant and may be retained by recorder/history. Raw items, addresses and
+payment objects are not exposed, and location consent is unchanged. Diagnostics
+remain count-only.
 Add the integration from Home Assistant's **Add Integration** menu. This is the
 supported configuration path and keeps rotated Wolt credentials durable across
 Home Assistant restarts.
