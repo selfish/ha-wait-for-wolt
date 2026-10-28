@@ -87,6 +87,20 @@ def item_count(order: dict[str, Any]) -> int | None:
     return sum(item["count"] for item in items)
 
 
+def pickup_coordinates(details: dict[str, Any]) -> tuple[float, float] | None:
+    """Read canonical purchase-tracking venue geometry in [longitude, latitude] order."""
+    point = details.get("venue_coordinates")
+    if not isinstance(point, list) or len(point) != 2:
+        return None
+    lon, lat = point
+    if any(type(x) not in (float, int) for x in (lat, lon)):
+        return None
+    # Bounds reject nonfinite floats and huge integers before float conversion.
+    if not -90 <= lat <= 90 or not -180 <= lon <= 180:
+        return None
+    return float(lat), float(lon)
+
+
 def dropoff_coordinates(details: dict[str, Any]) -> tuple[float, float] | None:
     """Read the actual GeoJSON destination; never substitute HA's home zone."""
     location = details.get("delivery_location")

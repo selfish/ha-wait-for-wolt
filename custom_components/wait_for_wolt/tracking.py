@@ -189,7 +189,11 @@ class WoltTrackingSensor(CoordinatorEntity[WoltDataUpdateCoordinator], SensorEnt
                     coordinates(location.get("latitude"), location.get("longitude"))
                 )
                 if "latitude" in attrs:
-                    attrs["coordinate_source"] = "wolt_venue_json_ld"
+                    attrs["coordinate_source"] = (
+                        "wolt_order_details"
+                        if location.get("coordinate_source") == "wolt_order_details"
+                        else "wolt_venue_json_ld"
+                    )
             else:
                 from .facts import dropoff_coordinates
 

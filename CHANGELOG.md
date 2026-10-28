@@ -8,6 +8,12 @@ spellings such as `0.1.0b1` so Home Assistant and Python tooling agree.
 
 ## [Unreleased]
 
+- Prefer validated `order_details.venue_coordinates` for the opt-in pickup pin.
+  Public venue JSON-LD remains a fallback when order geometry is unavailable;
+  valid order geometry avoids the extra request and public-page redirects.
+- Preserve location consent, terminal cleanup, stable entity IDs and explicit
+  coordinate-source metadata. Courier selection is unchanged.
+
 ## [0.1.0b4] — 2026-10-16
 
 - Restore the canonical `venue.name` as the scalar `venue_name` attribute used by

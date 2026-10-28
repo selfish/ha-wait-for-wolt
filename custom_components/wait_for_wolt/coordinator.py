@@ -22,6 +22,7 @@ from .api import (
     is_active_order,
 )
 from .const import DOMAIN
+from .facts import pickup_coordinates
 from .privacy import location_enabled
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,10 +109,18 @@ class WoltDataUpdateCoordinator(DataUpdateCoordinator[WoltCoordinatorData]):
                         failures + 1,
                     )
                 if location_enabled(self.hass, self.entry, order_id, "pickup"):
-                    with suppress(WoltConnectionError, WoltInvalidPayloadError):
-                        pickups[order_id] = await self.api.fetch_venue_location(
-                            orders[order_id]
-                        )
+                    point = pickup_coordinates(details.get(order_id, {}))
+                    if point is not None:
+                        pickups[order_id] = {
+                            "latitude": point[0],
+                            "longitude": point[1],
+                            "coordinate_source": "wolt_order_details",
+                        }
+                    else:
+                        with suppress(WoltConnectionError, WoltInvalidPayloadError):
+                            pickups[order_id] = await self.api.fetch_venue_location(
+                                orders[order_id]
+                            )
             if rich_tracking_failed and not self._rich_tracking_warning_logged:
                 _LOGGER.warning("Rich Wolt order tracking details are unavailable")
             self._rich_tracking_warning_logged = rich_tracking_failed
