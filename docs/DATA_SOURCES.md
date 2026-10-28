@@ -37,8 +37,11 @@ customer payloads, purchase IDs or coordinates belong in this repository.
   and `service_fee` from `order_details`, with an explicit recognized `currency`.
   Missing, malformed, negative or ambiguous amounts remain unknown. These are
   active-order facts, not account aggregates, and clear when rich data disappears.
-- **Pickup/dropoff (location opt-in):** preserve pickup venue coordinates and read
-  the actual dropoff from `delivery_location.coordinates`, a GeoJSON Point with
+- **Pickup/dropoff (location opt-in):** prefer `order_details.venue_coordinates`,
+  a numeric `[longitude, latitude]` pair observed on live orders. Fall back to the
+  public venue JSON-LD only when order geometry is absent or invalid; the pickup
+  `coordinate_source` distinguishes `wolt_order_details` from `wolt_venue_json_ld`.
+  Read the actual dropoff from `delivery_location.coordinates`, a GeoJSON Point with
   longitude first. Only validated coordinates are exposed, never address fields.
   Home Assistant's Home zone is not used as a substitute. Existing per-entity,
   per-order consent, disabled settings and explicit opt-out remain authoritative.
@@ -46,6 +49,18 @@ customer payloads, purchase IDs or coordinates belong in this repository.
 `payment_time.$date` is a status attribute when it is a valid timestamp. Raw
 payment/group/customer objects, delivery instructions and item descriptions are
 not entity attributes or diagnostic output.
+
+## Live map follow-up (2026-10-28)
+
+An active order returned HTTP 200 from both authenticated endpoints and supplied
+valid venue geometry. HA detected the order, maps were enabled, and pickup and
+destination markers had coordinates. No courier was present in the tracking
+response at this early stage; absence is not a connection failure. An earlier
+order's public venue URL redirected and yielded no usable JSON-LD, motivating
+the canonical order-geometry path rather than relying on public-page scraping.
+No raw payloads, locations, names or purchase IDs are retained in this document.
+This is source/installed-behavior evidence, not proof that this new code is
+installed or that a full delivery has been observed.
 
 ## Verification boundary
 
